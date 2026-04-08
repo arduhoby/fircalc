@@ -7,6 +7,8 @@ enum MemorySlot { m1, m2, m3 }
 class StandardCalculatorState {
   const StandardCalculatorState({
     required this.display,
+    required this.expressionBuffer,
+    required this.recentOperations,
     required this.currentInput,
     required this.accumulator,
     required this.pendingOperator,
@@ -16,6 +18,8 @@ class StandardCalculatorState {
 
   factory StandardCalculatorState.initial() => StandardCalculatorState(
     display: '0',
+    expressionBuffer: '',
+    recentOperations: const [],
     currentInput: '0',
     accumulator: DecimalValue.zero(),
     pendingOperator: null,
@@ -28,6 +32,8 @@ class StandardCalculatorState {
   );
 
   final String display;
+  final String expressionBuffer;
+  final List<String> recentOperations;
   final String currentInput;
   final DecimalValue accumulator;
   final CalcOperator? pendingOperator;
@@ -36,6 +42,9 @@ class StandardCalculatorState {
 
   StandardCalculatorState copyWith({
     String? display,
+    String? expressionBuffer,
+    List<String>? recentOperations,
+    bool clearRecentOperations = false,
     String? currentInput,
     DecimalValue? accumulator,
     CalcOperator? pendingOperator,
@@ -45,6 +54,10 @@ class StandardCalculatorState {
   }) {
     return StandardCalculatorState(
       display: display ?? this.display,
+      expressionBuffer: expressionBuffer ?? this.expressionBuffer,
+      recentOperations: clearRecentOperations
+          ? const []
+          : (recentOperations ?? this.recentOperations),
       currentInput: currentInput ?? this.currentInput,
       accumulator: accumulator ?? this.accumulator,
       pendingOperator: clearPendingOperator

@@ -12,6 +12,7 @@ class MarketScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final quoteAsync = ref.watch(trackedFxRatesProvider);
+    final watchAsync = ref.watch(trackedMarketWatchProvider);
     final locale = Localizations.localeOf(context).toLanguageTag();
 
     return SafeArea(
@@ -25,7 +26,7 @@ class MarketScreen extends ConsumerWidget {
                 title: const Text('TCMB Takip Seti'),
                 subtitle: Text(
                   AppFlavor.enableLiveMarketProviders
-                      ? 'USD, EUR, GBP için günlük + efektif alış/satış izleniyor.'
+                      ? 'USD/EUR/GBP + BTC, ETH, Gram Altın, Çeyrek Altın, Brent izleniyor.'
                       : 'Lite modda canlı provider kapalı. Son kayıtlı/manüel veri gösteriliyor.',
                 ),
                 trailing: IconButton(
@@ -36,25 +37,114 @@ class MarketScreen extends ConsumerWidget {
             ),
             const SizedBox(height: 8),
             Expanded(
-              child: Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(10),
-                  child: quoteAsync.when(
-                    data: (rows) => _RatesTable(rows: rows, locale: locale),
-                    loading: () =>
-                        const Center(child: CircularProgressIndicator()),
-                    error: (error, stackTrace) => const Center(
-                      child: Text(
-                        'Kur verisi alınamadı. Fallback verisi kullanılmalı.',
+              child: Column(
+                children: [
+                  Expanded(
+                    child: Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(10),
+                        child: quoteAsync.when(
+                          data: (rows) =>
+                              _RatesTable(rows: rows, locale: locale),
+                          loading: () =>
+                              const Center(child: CircularProgressIndicator()),
+                          error: (error, stackTrace) => const Center(
+                            child: Text(
+                              'Kur verisi alınamadı. Fallback verisi kullanılmalı.',
+                            ),
+                          ),
+                        ),
                       ),
                     ),
                   ),
-                ),
+                  const SizedBox(height: 8),
+                  Expanded(
+                    child: Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(10),
+                        child: watchAsync.when(
+                          data: (rows) =>
+                              _MarketWatchTable(rows: rows, locale: locale),
+                          loading: () =>
+                              const Center(child: CircularProgressIndicator()),
+                          error: (error, stackTrace) => const Center(
+                            child: Text('Piyasa verisi alınamadı.'),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
         ),
       ),
+    );
+  }
+}
+
+class _MarketWatchTable extends StatelessWidget {
+  const _MarketWatchTable({required this.rows, required this.locale});
+
+  final List<MarketWatchSnapshot> rows;
+  final String locale;
+
+  @override
+  Widget build(BuildContext context) {
+    if (rows.isEmpty) {
+      return const Center(
+        child: Text('Gösterilecek piyasa verisi bulunamadı.'),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Padding(
+          padding: EdgeInsets.only(bottom: 8),
+          child: Text(
+            'Piyasa İzleme',
+            style: TextStyle(fontWeight: FontWeight.w700),
+          ),
+        ),
+        Expanded(
+          child: Scrollbar(
+            thumbVisibility: true,
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: DataTable(
+                columns: const [
+                  DataColumn(label: Text('Kod')),
+                  DataColumn(label: Text('Ad')),
+                  DataColumn(label: Text('Fiyat')),
+                  DataColumn(label: Text('Birim')),
+                  DataColumn(label: Text('Kaynak')),
+                ],
+                rows: rows
+                    .map(
+                      (e) => DataRow(
+                        cells: [
+                          DataCell(Text(e.code)),
+                          DataCell(Text(e.name)),
+                          DataCell(
+                            Text(
+                              _RatesTable._fmt(e.priceTry.toString(), locale),
+                            ),
+                          ),
+                          DataCell(Text(e.unit)),
+                          DataCell(
+                            Text(_RatesTable._sourceText(e.source, e.status)),
+                          ),
+                        ],
+                      ),
+                    )
+                    .toList(),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

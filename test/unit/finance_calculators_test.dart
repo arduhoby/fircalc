@@ -20,5 +20,15 @@ void main() {
       );
       expect(result.toString(), '1200');
     });
+
+    test('compound interest supports custom compounding frequency', () {
+      final result = FinanceCalculators.compoundInterest(
+        principal: DecimalValue.parse('1000'),
+        annualRate: DecimalValue.parse('10'),
+        years: 2,
+        compoundsPerYear: 12,
+      );
+      expect(result.toString(), '1220.39096138');
+    });
   });
 }

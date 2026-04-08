@@ -73,7 +73,7 @@ void main() {
       state = engine.equals(state);
 
       expect(state.inputBuffer, '5');
-      expect(state.pendingExpression, '15 / 3 =');
+      expect(state.pendingExpression, '15 / 3 = 5');
     });
 
     test('percent creates interim result and expression', () {
@@ -83,7 +83,69 @@ void main() {
       state = engine.percent(state);
 
       expect(state.inputBuffer, '0.5');
-      expect(state.pendingExpression, '50 % =');
+      expect(state.pendingExpression, '50 % = 0.5');
+    });
+
+    test('vat excluded calculates gross amount with expression', () {
+      var state = TapeSessionState.initial();
+      state = engine.inputDigit(state, '1');
+      state = engine.inputDigit(state, '0');
+      state = engine.inputDigit(state, '0');
+      state = engine.applyVat(
+        state,
+        rate: DecimalValue.parse('18'),
+        mode: TapeVatMode.excluded,
+      );
+
+      expect(state.inputBuffer, '118');
+      expect(state.pendingExpression, '100 + VAT(%18) = 118');
+    });
+
+    test('interim expression is preserved when adding to tape', () {
+      var state = TapeSessionState.initial();
+      state = engine.inputDigit(state, '1');
+      state = engine.inputDigit(state, '0');
+      state = engine.inputDigit(state, '0');
+      state = engine.applyVat(
+        state,
+        rate: DecimalValue.parse('18'),
+        mode: TapeVatMode.excluded,
+      );
+      state = engine.addSignedLine(state, TapeLineSign.plus);
+
+      expect(state.lines.last.amount.toString(), '118');
+      expect(state.lines.last.expression, '100 + VAT(%18) = 118');
+    });
+
+    test('multiply expression can be written to tape with plus sign', () {
+      var state = TapeSessionState.initial();
+      state = engine.inputDigit(state, '1');
+      state = engine.inputDigit(state, '2');
+      state = engine.startInterimOperation(
+        state,
+        TapePendingOperation.multiply,
+      );
+      state = engine.inputDigit(state, '3');
+      state = engine.equals(state);
+      state = engine.addSignedLine(state, TapeLineSign.plus);
+
+      expect(state.lines.last.amount.toString(), '36');
+      expect(state.lines.last.expression, '12 × 3 = 36');
+    });
+
+    test('parenthesized expression evaluates correctly', () {
+      var state = TapeSessionState.initial();
+      state = engine.leftParen(state);
+      state = engine.inputDigit(state, '2');
+      state = engine.expressionOperator(state, '+');
+      state = engine.inputDigit(state, '3');
+      state = engine.rightParen(state);
+      state = engine.expressionOperator(state, '*');
+      state = engine.inputDigit(state, '4');
+      state = engine.equals(state);
+
+      expect(state.inputBuffer, '20');
+      expect(state.pendingExpression, '(2+3)*4 = 20');
     });
   });
 }

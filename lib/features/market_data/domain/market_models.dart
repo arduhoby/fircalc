@@ -16,6 +16,8 @@ enum MarketDataStatus { live, stale, manual, offline }
 
 enum FxRateKind { daily, effective }
 
+enum MarketWatchKind { crypto, preciousMetal, energy }
+
 class ExchangeRateQuote {
   const ExchangeRateQuote({
     required this.base,
@@ -51,6 +53,28 @@ class FxRateSnapshot {
   final FxRateKind kind;
   final DecimalValue buy;
   final DecimalValue sell;
+  final DateTime timestamp;
+  final DataSourceType source;
+  final MarketDataStatus status;
+}
+
+class MarketWatchSnapshot {
+  const MarketWatchSnapshot({
+    required this.code,
+    required this.name,
+    required this.kind,
+    required this.priceTry,
+    required this.unit,
+    required this.timestamp,
+    required this.source,
+    required this.status,
+  });
+
+  final String code;
+  final String name;
+  final MarketWatchKind kind;
+  final DecimalValue priceTry;
+  final String unit;
   final DateTime timestamp;
   final DataSourceType source;
   final MarketDataStatus status;

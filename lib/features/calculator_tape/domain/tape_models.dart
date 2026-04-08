@@ -8,12 +8,15 @@ enum TapePendingOperation { multiply, divide }
 
 enum TapeMemorySlot { m1, m2, m3 }
 
+enum TapeVatMode { included, excluded }
+
 class TapeLine {
   const TapeLine({
     required this.index,
     required this.sign,
     required this.amount,
     required this.kind,
+    this.expression,
     required this.createdAt,
   });
 
@@ -21,6 +24,7 @@ class TapeLine {
   final TapeLineSign sign;
   final DecimalValue amount;
   final TapeLineKind kind;
+  final String? expression;
   final DateTime createdAt;
 }
 
@@ -28,6 +32,7 @@ class TapeSessionState {
   const TapeSessionState({
     required this.lines,
     required this.inputBuffer,
+    required this.expressionBuffer,
     required this.equalsCount,
     required this.cycle,
     required this.lastInterimResult,
@@ -40,6 +45,7 @@ class TapeSessionState {
   factory TapeSessionState.initial() => const TapeSessionState(
     lines: [],
     inputBuffer: '0',
+    expressionBuffer: '',
     equalsCount: 0,
     cycle: 1,
     lastInterimResult: null,
@@ -55,6 +61,7 @@ class TapeSessionState {
 
   final List<TapeLine> lines;
   final String inputBuffer;
+  final String expressionBuffer;
   final int equalsCount;
   final int cycle;
   final DecimalValue? lastInterimResult;
@@ -66,6 +73,7 @@ class TapeSessionState {
   TapeSessionState copyWith({
     List<TapeLine>? lines,
     String? inputBuffer,
+    String? expressionBuffer,
     int? equalsCount,
     int? cycle,
     DecimalValue? lastInterimResult,
@@ -77,10 +85,14 @@ class TapeSessionState {
     bool clearPendingOperation = false,
     bool clearPendingLeftOperand = false,
     bool clearPendingExpression = false,
+    bool clearExpressionBuffer = false,
   }) {
     return TapeSessionState(
       lines: lines ?? this.lines,
       inputBuffer: inputBuffer ?? this.inputBuffer,
+      expressionBuffer: clearExpressionBuffer
+          ? ''
+          : (expressionBuffer ?? this.expressionBuffer),
       equalsCount: equalsCount ?? this.equalsCount,
       cycle: cycle ?? this.cycle,
       lastInterimResult: clearInterimResult

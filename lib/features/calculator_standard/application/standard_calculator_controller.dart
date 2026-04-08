@@ -17,6 +17,11 @@ class StandardCalculatorController extends Notifier<StandardCalculatorState> {
   void digit(String d) => state = _engine.inputDigit(state, d);
   void decimalPoint() => state = _engine.inputDecimalPoint(state);
   void operation(CalcOperator op) => state = _engine.setOperation(state, op);
+  void power() => state = _engine.power(state);
+  void leftParen() => state = _engine.leftParen(state);
+  void rightParen() => state = _engine.rightParen(state);
+  void sqrt() => state = _engine.sqrt(state);
+  void backspace() => state = _engine.backspace(state);
   void equals() => state = _engine.equals(state);
   void clear() => state = _engine.clear(state);
   void clearEntry() => state = _engine.clearEntry(state);

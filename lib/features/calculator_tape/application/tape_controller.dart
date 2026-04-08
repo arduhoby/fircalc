@@ -1,4 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../../core/types/decimal_value.dart';
+import '../data/tape_storage.dart';
 import '../domain/tape_engine.dart';
 import '../domain/tape_models.dart';
 
@@ -7,39 +12,143 @@ final tapeControllerProvider =
 
 class TapeController extends Notifier<TapeSessionState> {
   final _engine = TapeEngine();
+  late final TapeStorage _storage;
+  var _restoreStarted = false;
 
   @override
-  TapeSessionState build() => TapeSessionState.initial();
+  TapeSessionState build() {
+    _storage = ref.read(tapeStorageProvider);
+    _restoreLatestIfAny();
+    return TapeSessionState.initial();
+  }
 
-  void digit(String d) => state = _engine.inputDigit(state, d);
-  void decimalPoint() => state = _engine.inputDecimal(state);
-  void toggleSign() => state = _engine.toggleSign(state);
-  void clearEntry() => state = _engine.clearEntry(state);
-  void clearAll() => state = _engine.clearAll(state);
-  void percent() => state = _engine.percent(state);
-  void addPlus() => state = _engine.addSignedLine(state, TapeLineSign.plus);
-  void addMinus() => state = _engine.addSignedLine(state, TapeLineSign.minus);
-  void equals() => state = _engine.equals(state);
+  void _restoreLatestIfAny() {
+    if (_restoreStarted) return;
+    _restoreStarted = true;
+    unawaited(() async {
+      final saved = await _storage.loadLatest();
+      if (saved == null || !ref.mounted) return;
+      state = saved;
+    }());
+  }
 
-  void startMultiply() => state = _engine.startInterimOperation(
-    state,
-    TapePendingOperation.multiply,
+  void _mutate(TapeSessionState Function(TapeSessionState current) reducer) {
+    state = reducer(state);
+    unawaited(_storage.saveLatest(state));
+  }
+
+  void digit(String d) => _mutate((current) => _engine.inputDigit(current, d));
+  void decimalPoint() => _mutate(_engine.inputDecimal);
+  void toggleSign() => _mutate(_engine.toggleSign);
+  void clearEntry() => _mutate(_engine.clearEntry);
+  void backspace() => _mutate(_engine.backspace);
+  void clearAll() => _mutate(_engine.clearAll);
+  void clearAllMemories() => _mutate(_engine.clearAllMemories);
+  void percent() => _mutate(_engine.percent);
+  void vat({required String ratePercent, required TapeVatMode mode}) {
+    _mutate(
+      (current) => _engine.applyVat(
+        current,
+        rate: DecimalValue.parse(ratePercent),
+        mode: mode,
+      ),
+    );
+  }
+
+  void applyEffectiveFxRate({
+    required String currencyLabel,
+    required String rate,
+  }) {
+    _mutate(
+      (current) => _engine.applyEffectiveFxRate(
+        current,
+        currencyLabel: currencyLabel,
+        rate: DecimalValue.parse(rate),
+      ),
+    );
+  }
+
+  void applyFormulaResult({
+    required String expression,
+    required String result,
+  }) {
+    _mutate(
+      (current) => _engine.applyFormulaResult(
+        current,
+        expression: expression,
+        result: DecimalValue.parse(result),
+      ),
+    );
+  }
+
+  void addPlus() {
+    _mutate((current) {
+      if (current.expressionBuffer.isNotEmpty) {
+        return _engine.expressionOperator(current, '+');
+      }
+      var next = current;
+      if (next.pendingOperation != null && next.pendingLeftOperand != null) {
+        next = _engine.equals(next);
+      }
+      return _engine.addSignedLine(next, TapeLineSign.plus);
+    });
+  }
+
+  void addMinus() {
+    _mutate((current) {
+      if (current.expressionBuffer.isNotEmpty) {
+        return _engine.expressionOperator(current, '-');
+      }
+      var next = current;
+      if (next.pendingOperation != null && next.pendingLeftOperand != null) {
+        next = _engine.equals(next);
+      }
+      return _engine.addSignedLine(next, TapeLineSign.minus);
+    });
+  }
+
+  void equals() => _mutate(_engine.equals);
+
+  void startMultiply() => _mutate(
+    (current) => current.expressionBuffer.isNotEmpty
+        ? _engine.expressionOperator(current, '*')
+        : _engine.startInterimOperation(current, TapePendingOperation.multiply),
   );
-  void startDivide() =>
-      state = _engine.startInterimOperation(state, TapePendingOperation.divide);
+  void startDivide() => _mutate(
+    (current) => current.expressionBuffer.isNotEmpty
+        ? _engine.expressionOperator(current, '/')
+        : _engine.startInterimOperation(current, TapePendingOperation.divide),
+  );
 
-  void addInterimAsPlus() =>
-      state = _engine.addInterimResultToTape(state, TapeLineSign.plus);
-  void addInterimAsMinus() =>
-      state = _engine.addInterimResultToTape(state, TapeLineSign.minus);
+  void leftParen() => _mutate(_engine.leftParen);
+  void rightParen() => _mutate(_engine.rightParen);
+  void power() => _mutate(_engine.power);
+  void sqrt() => _mutate(_engine.sqrt);
+
+  void addInterimAsPlus() => _mutate(
+    (current) => _engine.addInterimResultToTape(current, TapeLineSign.plus),
+  );
+  void addInterimAsMinus() => _mutate(
+    (current) => _engine.addInterimResultToTape(current, TapeLineSign.minus),
+  );
 
   void memoryStore(TapeMemorySlot slot) =>
-      state = _engine.memoryStore(state, slot);
+      _mutate((current) => _engine.memoryStore(current, slot));
   void memoryRecall(TapeMemorySlot slot) =>
-      state = _engine.memoryRecall(state, slot);
-  void memoryAdd(TapeMemorySlot slot) => state = _engine.memoryAdd(state, slot);
+      _mutate((current) => _engine.memoryRecall(current, slot));
+  void memoryAdd(TapeMemorySlot slot) =>
+      _mutate((current) => _engine.memoryAdd(current, slot));
   void memorySubtract(TapeMemorySlot slot) =>
-      state = _engine.memorySubtract(state, slot);
+      _mutate((current) => _engine.memorySubtract(current, slot));
   void memoryClear(TapeMemorySlot slot) =>
-      state = _engine.memoryClear(state, slot);
+      _mutate((current) => _engine.memoryClear(current, slot));
+
+  Future<String> saveSnapshotNow() => _storage.saveSnapshot(state);
+  Future<List<TapeSnapshotInfo>> listSnapshots() => _storage.listSnapshots();
+  Future<void> openSnapshot(int id) async {
+    final loaded = await _storage.loadSnapshot(id);
+    if (loaded == null || !ref.mounted) return;
+    state = loaded;
+    unawaited(_storage.saveLatest(state));
+  }
 }
