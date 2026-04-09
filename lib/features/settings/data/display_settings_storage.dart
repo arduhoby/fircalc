@@ -37,6 +37,9 @@ class DisplaySettingsStorage {
           .map((item) => item['source'].toString().trim())
           .where((item) => item.isNotEmpty)
           .toList();
+      final selectedSource = (data['market_news_selected_source'] as String?)
+              ?.trim() ??
+          '';
 
       return DisplaySettings(
         decimalDigits: (data['decimal_digits'] as int?) ?? 2,
@@ -56,6 +59,8 @@ class DisplaySettingsStorage {
             newsSources.isEmpty
                 ? DisplaySettings.initial().marketNewsSources
                 : newsSources,
+        marketNewsSelectedSource:
+            selectedSource.isEmpty ? '' : selectedSource,
       );
     } catch (_) {
       return null;
@@ -78,6 +83,7 @@ class DisplaySettingsStorage {
           'tape_aux_left': settings.tapeAuxLeft.name,
           'tape_aux_right': settings.tapeAuxRight.name,
           'market_price_digits': settings.marketPriceDigits,
+          'market_news_selected_source': settings.marketNewsSelectedSource,
         },
         conflictAlgorithm: ConflictAlgorithm.replace,
       );
@@ -122,6 +128,7 @@ class DisplaySettingsStorage {
       },
       onOpen: (db) async {
         await _createSchema(db);
+        await _ensureSelectedNewsColumn(db);
         final existing = Sqflite.firstIntValue(
           await db.rawQuery('SELECT COUNT(*) FROM display_settings'),
         );
@@ -146,7 +153,8 @@ class DisplaySettingsStorage {
         tape_key_height INTEGER NOT NULL,
         tape_aux_left TEXT NOT NULL,
         tape_aux_right TEXT NOT NULL,
-        market_price_digits INTEGER NOT NULL
+        market_price_digits INTEGER NOT NULL,
+        market_news_selected_source TEXT NOT NULL DEFAULT ''
       )
       ''',
     );
@@ -183,6 +191,7 @@ class DisplaySettingsStorage {
         'tape_aux_left': initial.tapeAuxLeft.name,
         'tape_aux_right': initial.tapeAuxRight.name,
         'market_price_digits': initial.marketPriceDigits,
+        'market_news_selected_source': initial.marketNewsSelectedSource,
       },
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
@@ -198,5 +207,16 @@ class DisplaySettingsStorage {
         'source': initial.marketNewsSources[index],
       });
     }
+  }
+
+  Future<void> _ensureSelectedNewsColumn(DatabaseExecutor db) async {
+    final columns = await db.rawQuery('PRAGMA table_info(display_settings)');
+    final hasSelected = columns.any(
+      (row) => row['name']?.toString() == 'market_news_selected_source',
+    );
+    if (hasSelected) return;
+    await db.execute(
+      "ALTER TABLE display_settings ADD COLUMN market_news_selected_source TEXT NOT NULL DEFAULT ''",
+    );
   }
 }

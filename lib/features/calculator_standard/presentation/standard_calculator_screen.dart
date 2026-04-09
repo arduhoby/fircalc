@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -64,111 +62,119 @@ class StandardCalculatorScreen extends ConsumerWidget {
             final keypadHeight =
                 (keypadRows * settings.tapeKeyHeight.toDouble()) +
                 ((keypadRows - 1) * keypadGap);
-            final memoryHeight = settings.tapeKeyHeight.toDouble() + 8;
-            final topMinHeight = math.max(
-              120.0,
-              constraints.maxHeight - keypadHeight - memoryHeight - 16,
-            );
-
-            return Column(
-              children: [
-                Expanded(
-                  child: ConstrainedBox(
-                    constraints: BoxConstraints(minHeight: topMinHeight),
-                    child: Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: LayoutBuilder(
-                          builder: (context, constraints) {
-                            final compact = constraints.maxHeight < 72;
-                            if (compact) {
-                              return Align(
-                                alignment: Alignment.centerRight,
-                                child: Text(
-                                  formattedDisplay,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: Theme.of(
-                                    context,
-                                  ).textTheme.headlineSmall,
-                                ),
-                              );
-                            }
-
-                            return Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                if (historyPreview.isNotEmpty)
-                                  ...historyPreview.map(
-                                    (line) => Align(
-                                      alignment: Alignment.centerRight,
-                                      child: Text(
-                                        line,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .bodySmall
-                                            ?.copyWith(color: Colors.black54),
-                                      ),
+            return SingleChildScrollView(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                child: IntrinsicHeight(
+                  child: Column(
+                    children: [
+                      Expanded(
+                        child: Card(
+                          child: Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: LayoutBuilder(
+                              builder: (context, constraints) {
+                                final compact = constraints.maxHeight < 72;
+                                if (compact) {
+                                  return Align(
+                                    alignment: Alignment.centerRight,
+                                    child: Text(
+                                      formattedDisplay,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: Theme.of(
+                                        context,
+                                      ).textTheme.headlineSmall,
                                     ),
-                                  ),
-                                if (historyPreview.isNotEmpty)
-                                  const SizedBox(height: 4),
-                                if (expressionPreview.isNotEmpty ||
-                                    openParen > 0)
-                                  Row(
-                                    children: [
-                                      Expanded(
-                                        child: Text(
-                                          expressionPreview,
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: Theme.of(context)
-                                              .textTheme
-                                              .bodySmall
-                                              ?.copyWith(color: Colors.black54),
+                                  );
+                                }
+
+                                return Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
+                                  children: [
+                                    if (historyPreview.isNotEmpty)
+                                      ...historyPreview.map(
+                                        (line) => Align(
+                                          alignment: Alignment.centerRight,
+                                          child: Text(
+                                            line,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: Theme.of(context)
+                                                .textTheme
+                                                .bodySmall
+                                                ?.copyWith(
+                                                  color: Colors.black54,
+                                                ),
+                                          ),
                                         ),
                                       ),
-                                      Text(
-                                        '(: $openParen',
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .bodySmall
-                                            ?.copyWith(color: Colors.black54),
+                                    if (historyPreview.isNotEmpty)
+                                      const SizedBox(height: 4),
+                                    if (expressionPreview.isNotEmpty ||
+                                        openParen > 0)
+                                      Row(
+                                        children: [
+                                          Expanded(
+                                            child: Text(
+                                              expressionPreview,
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: Theme.of(context)
+                                                  .textTheme
+                                                  .bodySmall
+                                                  ?.copyWith(
+                                                    color: Colors.black54,
+                                                  ),
+                                            ),
+                                          ),
+                                          Text(
+                                            '(: $openParen',
+                                            style: Theme.of(context)
+                                                .textTheme
+                                                .bodySmall
+                                                ?.copyWith(
+                                                  color: Colors.black54,
+                                                ),
+                                          ),
+                                        ],
                                       ),
-                                    ],
-                                  ),
-                                const Spacer(),
-                                Align(
-                                  alignment: Alignment.bottomRight,
-                                  child: Text(
-                                    formattedDisplay,
-                                    style: Theme.of(
-                                      context,
-                                    ).textTheme.displaySmall,
-                                  ),
-                                ),
-                              ],
-                            );
-                          },
+                                    const Spacer(),
+                                    Align(
+                                      alignment: Alignment.bottomRight,
+                                      child: Text(
+                                        formattedDisplay,
+                                        style: Theme.of(
+                                          context,
+                                        ).textTheme.displaySmall,
+                                      ),
+                                    ),
+                                  ],
+                                );
+                              },
+                            ),
+                          ),
                         ),
                       ),
-                    ),
+                      const SizedBox(height: 8),
+                      _MemoryRow(controller: controller, settings: settings),
+                      const SizedBox(height: keypadGap),
+                      Align(
+                        alignment: Alignment.bottomCenter,
+                        child: SizedBox(
+                          width: double.infinity,
+                          height: keypadHeight,
+                          child: _Keypad(
+                            controller: controller,
+                            settings: settings,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                const SizedBox(height: 8),
-                _MemoryRow(controller: controller, settings: settings),
-                const SizedBox(height: keypadGap),
-                Align(
-                  alignment: Alignment.bottomCenter,
-                  child: SizedBox(
-                    width: double.infinity,
-                    height: keypadHeight,
-                    child: _Keypad(controller: controller, settings: settings),
-                  ),
-                ),
-              ],
+              ),
             );
           },
         ),

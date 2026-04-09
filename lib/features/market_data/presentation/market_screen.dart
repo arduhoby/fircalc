@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -55,7 +57,11 @@ class MarketNewsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final newsAsync = ref.watch(marketNewsProvider);
+    final settings = ref.watch(displaySettingsProvider);
+    final controller = ref.read(displaySettingsProvider.notifier);
     final locale = Localizations.localeOf(context).toLanguageTag();
+    final selectedSource = settings.marketNewsSelectedSource.trim();
+    final sources = settings.marketNewsSources.toSet().toList();
 
     return SafeArea(
       child: Padding(
@@ -63,11 +69,30 @@ class MarketNewsScreen extends ConsumerWidget {
         child: Card(
           child: Padding(
             padding: const EdgeInsets.all(10),
-            child: newsAsync.when(
-              data: (rows) => _MarketNewsList(rows: rows, locale: locale),
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (error, stackTrace) =>
-                  const Center(child: Text('Haberler alınamadı.')),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _NewsSourcePicker(
+                  sources: sources,
+                  selectedSource: selectedSource,
+                  onChanged: (value) {
+                    unawaited(
+                      controller.setMarketNewsSelectedSource(value ?? ''),
+                    );
+                  },
+                ),
+                const SizedBox(height: 12),
+                Expanded(
+                  child: newsAsync.when(
+                    data: (rows) =>
+                        _MarketNewsList(rows: rows, locale: locale),
+                    loading: () =>
+                        const Center(child: CircularProgressIndicator()),
+                    error: (error, stackTrace) =>
+                        const Center(child: Text('Haberler alınamadı.')),
+                  ),
+                ),
+              ],
             ),
           ),
         ),
@@ -139,7 +164,10 @@ class _UnifiedMarketTable extends StatelessWidget {
                               DataCell(Text(row.code)),
                               DataCell(Text(row.buyText ?? '-')),
                               DataCell(
-                                Text(row.sellOrPriceText),
+                                Text(
+                                  row.sellOrPriceText,
+                                  style: TextStyle(color: row.priceColor),
+                                ),
                                 onTap: row.snapshot == null
                                     ? null
                                     : () => _showMarketDetail(context, row),
@@ -449,6 +477,63 @@ class _MarketNewsList extends StatelessWidget {
   }
 }
 
+class _NewsSourcePicker extends StatelessWidget {
+  const _NewsSourcePicker({
+    required this.sources,
+    required this.selectedSource,
+    required this.onChanged,
+  });
+
+  final List<String> sources;
+  final String selectedSource;
+  final ValueChanged<String?> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final items = <DropdownMenuItem<String>>[
+      const DropdownMenuItem<String>(
+        value: '',
+        child: Text('Tümü'),
+      ),
+      ...sources.map(
+        (source) => DropdownMenuItem<String>(
+          value: source,
+          child: Text(_labelFor(source)),
+        ),
+      ),
+    ];
+
+    return InputDecorator(
+      decoration: const InputDecoration(
+        labelText: 'Haber kaynağı',
+        border: OutlineInputBorder(),
+        isDense: true,
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          value: sources.contains(selectedSource) ? selectedSource : '',
+          isExpanded: true,
+          items: items,
+          onChanged: onChanged,
+        ),
+      ),
+    );
+  }
+
+  String _labelFor(String source) {
+    final uri = Uri.tryParse(source);
+    if (uri == null) return source;
+    if (uri.host.contains('bigpara.hurriyet.com.tr')) {
+      return 'Bigpara RSS';
+    }
+    final host = uri.host.replaceFirst('www.', '');
+    final path = uri.pathSegments.isEmpty
+        ? ''
+        : '/${uri.pathSegments.last}';
+    return '$host$path';
+  }
+}
+
 class _SectionHeader extends StatelessWidget {
   const _SectionHeader({
     required this.title,
@@ -687,6 +772,7 @@ class _MarketRow {
     required this.closeText,
     required this.unit,
     required this.timestamp,
+    required this.priceColor,
     this.snapshot,
   });
 
@@ -701,6 +787,7 @@ class _MarketRow {
       closeText: null,
       unit: 'TRY',
       timestamp: item.timestamp,
+      priceColor: null,
     );
   }
 
@@ -726,6 +813,7 @@ class _MarketRow {
           : formatDecimal(item.closeTry!, digits, item.unit),
       unit: item.unit,
       timestamp: item.timestamp,
+      priceColor: _trendColor(item),
       snapshot: item,
     );
   }
@@ -739,6 +827,7 @@ class _MarketRow {
   final String? closeText;
   final String unit;
   final DateTime timestamp;
+  final Color? priceColor;
   final MarketWatchSnapshot? snapshot;
 
   static String formatRaw(String raw, int digits) {
@@ -761,6 +850,22 @@ class _MarketRow {
     if (item.code == 'CEYREK') return '3';
     if (item.kind == MarketWatchKind.crypto) return '4';
     return '5';
+  }
+
+  static Color? _trendColor(MarketWatchSnapshot item) {
+    if (item.kind != MarketWatchKind.stock) return null;
+    final reference = item.closeTry ?? item.openTry;
+    if (reference == null) return null;
+    final current = double.tryParse(item.priceTry.toString());
+    final ref = double.tryParse(reference.toString());
+    if (current == null || ref == null) return null;
+    if (current > ref) {
+      return const Color(0xFF1B8F3A);
+    }
+    if (current < ref) {
+      return const Color(0xFFC62828);
+    }
+    return const Color(0xFF455A64);
   }
 }
 

@@ -24,6 +24,7 @@ class DisplaySettings {
     required this.marketPriceDigits,
     required this.marketStockSymbols,
     required this.marketNewsSources,
+    required this.marketNewsSelectedSource,
   });
 
   factory DisplaySettings.initial() => const DisplaySettings(
@@ -38,6 +39,7 @@ class DisplaySettings {
     marketPriceDigits: 2,
     marketStockSymbols: [],
     marketNewsSources: ['https://bigpara.hurriyet.com.tr/rss/'],
+    marketNewsSelectedSource: '',
   );
 
   final int decimalDigits;
@@ -51,6 +53,7 @@ class DisplaySettings {
   final int marketPriceDigits;
   final List<String> marketStockSymbols;
   final List<String> marketNewsSources;
+  final String marketNewsSelectedSource;
 
   DisplaySettings copyWith({
     int? decimalDigits,
@@ -64,6 +67,7 @@ class DisplaySettings {
     int? marketPriceDigits,
     List<String>? marketStockSymbols,
     List<String>? marketNewsSources,
+    String? marketNewsSelectedSource,
   }) {
     return DisplaySettings(
       decimalDigits: decimalDigits ?? this.decimalDigits,
@@ -77,6 +81,8 @@ class DisplaySettings {
       marketPriceDigits: marketPriceDigits ?? this.marketPriceDigits,
       marketStockSymbols: marketStockSymbols ?? this.marketStockSymbols,
       marketNewsSources: marketNewsSources ?? this.marketNewsSources,
+      marketNewsSelectedSource:
+          marketNewsSelectedSource ?? this.marketNewsSelectedSource,
     );
   }
 }

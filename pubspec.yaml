@@ -1,7 +1,7 @@
 name: mfcalc
 description: Modular offline-first calculator with tape and finance tools.
 publish_to: 'none'
-version: 0.1.0+1
+version: 0.1.1+2
 
 environment:
   sdk: ^3.11.3

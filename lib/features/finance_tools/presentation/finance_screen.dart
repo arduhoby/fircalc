@@ -5,25 +5,37 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 
 import '../../../core/types/decimal_value.dart';
 import '../../../core/utils/number_display_formatter.dart';
 import '../../../core/widgets/calc_key_button.dart';
-import '../../calculator_tape/application/tape_controller.dart';
 import '../../calculator_tape/domain/tape_models.dart';
+import '../application/finance_tape_controller.dart';
 import '../domain/finance_calculators.dart';
 import '../../market_data/application/market_quote_provider.dart';
 import '../../market_data/domain/market_models.dart';
 import '../../settings/application/display_settings_controller.dart';
 import '../../settings/domain/display_settings.dart';
 
-class FinanceScreen extends ConsumerWidget {
+String _compactNumber(BuildContext context, String raw) {
+  final locale = Localizations.localeOf(context).toLanguageTag();
+  final parsed = DecimalValue.parse(raw).value.toDouble();
+  return NumberFormat.decimalPattern(locale).format(parsed);
+}
+
+class FinanceScreen extends ConsumerStatefulWidget {
   const FinanceScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final state = ref.watch(tapeControllerProvider);
-    final controller = ref.read(tapeControllerProvider.notifier);
+  ConsumerState<FinanceScreen> createState() => _FinanceScreenState();
+}
+
+class _FinanceScreenState extends ConsumerState<FinanceScreen> {
+  @override
+  Widget build(BuildContext context) {
+    final state = ref.watch(financeTapeControllerProvider);
+    final controller = ref.read(financeTapeControllerProvider.notifier);
     final settings = ref.watch(displaySettingsProvider);
     final fxRates = ref
         .watch(trackedFxRatesProvider)
@@ -38,53 +50,81 @@ class FinanceScreen extends ConsumerWidget {
         padding: const EdgeInsets.all(12),
         child: LayoutBuilder(
           builder: (context, constraints) {
-            const keypadGap = 8.0;
-            const keypadRows = 6;
-            final formulaButtonHeight = (settings.tapeKeyHeight - 6)
-                .clamp(34, 52)
-                .toDouble();
-            final formulaHeight = (2 * formulaButtonHeight) + keypadGap;
-            final keypadHeight =
-                (keypadRows * settings.tapeKeyHeight.toDouble()) +
-                ((keypadRows - 1) * keypadGap);
-            final topMinHeight = math.max(
-              140.0,
-              constraints.maxHeight - keypadHeight - formulaHeight - 16,
-            );
-            return SizedBox.expand(
-              child: Column(
-                children: [
-                  Expanded(
-                    child: ConstrainedBox(
-                      constraints: BoxConstraints(minHeight: topMinHeight),
-                      child: _FinanceDigitalPanel(
-                        state: state,
-                        locale: locale,
-                        settings: settings,
+                const keypadGap = 8.0;
+                const keypadRows = 6;
+                final formulaButtonHeight = (settings.tapeKeyHeight - 6)
+                    .clamp(34, 52)
+                    .toDouble();
+                final desiredFormulaHeight =
+                    (2 * formulaButtonHeight) + keypadGap;
+                final desiredKeypadHeight =
+                    (keypadRows * settings.tapeKeyHeight.toDouble()) +
+                    ((keypadRows - 1) * keypadGap);
+                final desiredBottom =
+                    desiredFormulaHeight + desiredKeypadHeight + 16;
+                final scale = math.min(
+                  1.0,
+                  constraints.maxHeight / math.max(desiredBottom, 1.0),
+                );
+                final compactScale = scale < 0.96 ? scale : 1.0;
+                final compactGap = (keypadGap * compactScale).clamp(4.0, 8.0);
+                final compactFormulaButtonHeight =
+                    (formulaButtonHeight * compactScale).clamp(30.0, 52.0);
+                final compactKeypadKeyHeight =
+                    (settings.tapeKeyHeight.toDouble() * compactScale)
+                        .clamp(30.0, 58.0);
+                final keypadHeight =
+                    (keypadRows * compactKeypadKeyHeight) +
+                    ((keypadRows - 1) * compactGap);
+                final formulaHeight =
+                    (2 * compactFormulaButtonHeight) + compactGap;
+                final reservedBottom = keypadHeight + formulaHeight + 16;
+                final topMinHeight = math.max(
+                  120.0,
+                  constraints.maxHeight - reservedBottom,
+                );
+
+                return Column(
+                  children: [
+                    Expanded(
+                      child: SingleChildScrollView(
+                      child: ConstrainedBox(
+                          constraints: BoxConstraints(minHeight: topMinHeight),
+                          child: _FinanceDigitalPanel(
+                            state: state,
+                            locale: locale,
+                            settings: settings,
+                            panelMinHeight: topMinHeight,
+                          ),
+                        ),
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 8),
-                  _FinanceFormulaBar(
-                    controller: controller,
-                    settings: settings,
-                  ),
-                  const SizedBox(height: keypadGap),
-                  Align(
-                    alignment: Alignment.bottomCenter,
-                    child: SizedBox(
-                      width: double.infinity,
-                      height: keypadHeight,
-                      child: _FinanceKeypad(
-                        controller: controller,
-                        settings: settings,
-                        fxRates: fxRates,
-                      ),
+                    const SizedBox(height: 8),
+                    _FinanceFormulaBar(
+                      controller: controller,
+                      settings: settings,
+                      compactScale: compactScale,
+                      gap: compactGap,
+                      buttonHeight: compactFormulaButtonHeight,
+                    ),
+                    const SizedBox(height: keypadGap),
+                    Align(
+                      alignment: Alignment.bottomCenter,
+                      child: SizedBox(
+                        width: double.infinity,
+                        height: keypadHeight,
+                        child: _FinanceKeypad(
+                          controller: controller,
+                          settings: settings,
+                          fxRates: fxRates,
+                          compactScale: compactScale,
+                          gap: compactGap,
+                          keyHeight: compactKeypadKeyHeight,
+                        ),
                     ),
                   ),
                 ],
-              ),
-            );
+              );
           },
         ),
       ),
@@ -93,10 +133,19 @@ class FinanceScreen extends ConsumerWidget {
 }
 
 class _FinanceFormulaBar extends StatelessWidget {
-  const _FinanceFormulaBar({required this.controller, required this.settings});
+  const _FinanceFormulaBar({
+    required this.controller,
+    required this.settings,
+    required this.compactScale,
+    required this.gap,
+    required this.buttonHeight,
+  });
 
-  final TapeController controller;
+  final FinanceTapeController controller;
   final DisplaySettings settings;
+  final double compactScale;
+  final double gap;
+  final double buttonHeight;
 
   @override
   Widget build(BuildContext context) {
@@ -130,13 +179,13 @@ class _FinanceFormulaBar extends StatelessWidget {
       ),
       (
         label: 'S. FAIZ',
-        tooltip: 'Basit faizle vade sonu tutari hesaplar.',
+        tooltip: 'Gunluk bazli basit faizle vade sonu tutari hesaplar.',
         action: () async =>
             _applyResult(await _openSimpleInterestSheet(context)),
       ),
       (
         label: 'B. FAIZ',
-        tooltip: 'Bilesik faizle vade sonu tutari hesaplar.',
+        tooltip: 'Gunluk bazli bilesik faizle vade sonu tutari hesaplar.',
         action: () async =>
             _applyResult(await _openCompoundInterestSheet(context)),
       ),
@@ -161,10 +210,6 @@ class _FinanceFormulaBar extends StatelessWidget {
       builder: (context, constraints) {
         const cols = 5;
         const rows = 2;
-        const gap = 8.0;
-        final buttonHeight = (settings.tapeKeyHeight - 6)
-            .clamp(34, 52)
-            .toDouble();
         final buttonWidth = (constraints.maxWidth - ((cols - 1) * gap)) / cols;
         final totalHeight = (rows * buttonHeight) + gap;
 
@@ -324,18 +369,19 @@ class _FinanceFormulaBar extends StatelessWidget {
                           paymentPerPeriod: pmt,
                         ),
                       };
-                      final solved = switch (solve) {
-                        _TvmSolve.fv => 'FV',
-                        _TvmSolve.pmt => 'PMT',
-                        _TvmSolve.pv => 'PV',
+                      final nText = _compactNumber(context, '$n');
+                      final iText = _compactNumber(context, i.toString());
+                      final pvText = _compactNumber(context, pv.toString());
+                      final pmtText = _compactNumber(context, pmt.toString());
+                      final fvText = _compactNumber(context, fv.toString());
+                      final summary = switch (solve) {
+                        _TvmSolve.fv => 'TVM N$nText I$iText PV $pvText PMT $pmtText',
+                        _TvmSolve.pmt => 'TVM N$nText I$iText PV $pvText FV $fvText',
+                        _TvmSolve.pv => 'TVM N$nText I$iText PMT $pmtText FV $fvText',
                       };
                       Navigator.pop(
                         context,
-                        _FormulaResult(
-                          expression:
-                              'TVM $solved (N=$n I/Y=${i.toString()} PV=${pv.toString()} PMT=${pmt.toString()} FV=${fv.toString()})',
-                          result: result,
-                        ),
+                        _FormulaResult(expression: summary, result: result),
                       );
                     } catch (_) {
                       ScaffoldMessenger.of(context).showSnackBar(
@@ -399,7 +445,7 @@ class _FinanceFormulaBar extends StatelessWidget {
                       context,
                       _FormulaResult(
                         expression:
-                            'AMORT INT=${result.totalInterest.toString()} PRN=${result.totalPrincipal.toString()}',
+                            'AMORT ${_compactNumber(context, principalCtrl.text.trim())} %${_compactNumber(context, annualCtrl.text.trim())} P${p1Ctrl.text.trim()}-${p2Ctrl.text.trim()}',
                         result: result.balance,
                       ),
                     );
@@ -476,6 +522,7 @@ class _FinanceFormulaBar extends StatelessWidget {
 
                       if (mode == _CashFlowSolve.npv) {
                         final rate = DecimalValue.parse(rateCtrl.text.trim());
+                        final rateText = _compactNumber(context, rate.toString());
                         final result = FinanceCalculators.npv(
                           discountRatePercent: rate,
                           cashFlows: flows,
@@ -483,7 +530,7 @@ class _FinanceFormulaBar extends StatelessWidget {
                         Navigator.pop(
                           context,
                           _FormulaResult(
-                            expression: 'NPV(rate=${rate.toString()}%)',
+                            expression: 'NPV %$rateText',
                             result: result,
                           ),
                         );
@@ -495,7 +542,11 @@ class _FinanceFormulaBar extends StatelessWidget {
                       );
                       Navigator.pop(
                         context,
-                        _FormulaResult(expression: 'IRR%', result: result),
+                        _FormulaResult(
+                          expression:
+                              'IRR ${_compactNumber(context, result.toString())}%',
+                          result: result,
+                        ),
                       );
                     } catch (_) {
                       ScaffoldMessenger.of(context).showSnackBar(
@@ -562,6 +613,7 @@ class _FinanceFormulaBar extends StatelessWidget {
                     try {
                       final rate = DecimalValue.parse(rateCtrl.text.trim());
                       final m = int.parse(mCtrl.text.trim());
+                      final rateText = _compactNumber(context, rate.toString());
                       final result = mode == _RateSolve.nomToEff
                           ? FinanceCalculators.nominalToEffective(
                               nominalRatePercent: rate,
@@ -575,8 +627,8 @@ class _FinanceFormulaBar extends StatelessWidget {
                         context,
                         _FormulaResult(
                           expression: mode == _RateSolve.nomToEff
-                              ? 'EFF%(NOM=${rate.toString()} m=$m)'
-                              : 'NOM%(EFF=${rate.toString()} m=$m)',
+                              ? 'EFF NOM %$rateText m$m'
+                              : 'NOM EFF %$rateText m$m',
                           result: result,
                         ),
                       );
@@ -599,7 +651,7 @@ class _FinanceFormulaBar extends StatelessWidget {
   Future<_FormulaResult?> _openSimpleInterestSheet(BuildContext context) async {
     final principalCtrl = TextEditingController(text: '100000');
     final annualCtrl = TextEditingController(text: '36');
-    final yearsCtrl = TextEditingController(text: '3');
+    final daysCtrl = TextEditingController(text: '365');
 
     return showModalBottomSheet<_FormulaResult>(
       context: context,
@@ -617,7 +669,7 @@ class _FinanceFormulaBar extends StatelessWidget {
             children: [
               _input('Anapara', principalCtrl, number: true),
               _input('Yıllık faiz %', annualCtrl, number: true),
-              _input('Yıl', yearsCtrl, number: true),
+              _input('Gün', daysCtrl, number: true),
               const SizedBox(height: 8),
               FilledButton(
                 onPressed: () {
@@ -626,18 +678,24 @@ class _FinanceFormulaBar extends StatelessWidget {
                       principalCtrl.text.trim(),
                     );
                     final annual = DecimalValue.parse(annualCtrl.text.trim());
-                    final years = int.parse(yearsCtrl.text.trim());
+                    final days = int.parse(daysCtrl.text.trim());
+                    final principalText = _compactNumber(
+                      context,
+                      principal.toString(),
+                    );
+                    final annualText = _compactNumber(
+                      context,
+                      annual.toString(),
+                    );
                     final result = FinanceCalculators.simpleInterest(
                       principal: principal,
                       annualRate: annual,
-                      years: years,
+                      days: days,
                     );
-                    final months = years * 12;
                     Navigator.pop(
                       context,
                       _FormulaResult(
-                        expression:
-                            'Basit Faiz | AnaPara=${principal.toString()} | Faiz%=${annual.toString()} | Vade=${months}ay',
+                        expression: 'SF $principalText %$annualText $days G',
                         result: result,
                       ),
                     );
@@ -661,8 +719,7 @@ class _FinanceFormulaBar extends StatelessWidget {
   ) async {
     final principalCtrl = TextEditingController(text: '100000');
     final annualCtrl = TextEditingController(text: '36');
-    final yearsCtrl = TextEditingController(text: '2');
-    final mCtrl = TextEditingController(text: '12');
+    final daysCtrl = TextEditingController(text: '365');
 
     return showModalBottomSheet<_FormulaResult>(
       context: context,
@@ -680,8 +737,7 @@ class _FinanceFormulaBar extends StatelessWidget {
             children: [
               _input('Anapara (P)', principalCtrl, number: true),
               _input('Yıllık faiz % (r)', annualCtrl, number: true),
-              _input('Yıl (y)', yearsCtrl, number: true),
-              _input('Yılda bileşikleme (m)', mCtrl, number: true),
+              _input('Gün', daysCtrl, number: true),
               const SizedBox(height: 8),
               FilledButton(
                 onPressed: () {
@@ -690,20 +746,24 @@ class _FinanceFormulaBar extends StatelessWidget {
                       principalCtrl.text.trim(),
                     );
                     final annual = DecimalValue.parse(annualCtrl.text.trim());
-                    final years = int.parse(yearsCtrl.text.trim());
-                    final m = int.parse(mCtrl.text.trim());
+                    final days = int.parse(daysCtrl.text.trim());
+                    final principalText = _compactNumber(
+                      context,
+                      principal.toString(),
+                    );
+                    final annualText = _compactNumber(
+                      context,
+                      annual.toString(),
+                    );
                     final result = FinanceCalculators.compoundInterest(
                       principal: principal,
                       annualRate: annual,
-                      years: years,
-                      compoundsPerYear: m,
+                      days: days,
                     );
-                    final months = years * 12;
                     Navigator.pop(
                       context,
                       _FormulaResult(
-                        expression:
-                            'Birleşik Faiz | AnaPara=${principal.toString()} | Faiz%=${annual.toString()} | Vade=${months}ay | m=$m',
+                        expression: 'BF $principalText %$annualText $days G',
                         result: result,
                       ),
                     );
@@ -751,6 +811,8 @@ class _FinanceFormulaBar extends StatelessWidget {
                     final n = int.parse(nCtrl.text.trim());
                     final i = DecimalValue.parse(iCtrl.text.trim());
                     final pv = DecimalValue.parse(pvCtrl.text.trim());
+                    final iText = _compactNumber(context, i.toString());
+                    final pvText = _compactNumber(context, pv.toString());
                     final result = FinanceCalculators.tvmSolvePayment(
                       periods: n,
                       ratePercentPerPeriod: i,
@@ -760,8 +822,7 @@ class _FinanceFormulaBar extends StatelessWidget {
                     Navigator.pop(
                       context,
                       _FormulaResult(
-                        expression:
-                            'PMT(N=$n I/Y=${i.toString()} PV=${pv.toString()})',
+                        expression: 'PMT N$n I$iText PV $pvText',
                         result: result,
                       ),
                     );
@@ -819,16 +880,18 @@ class _FinanceDigitalPanel extends StatelessWidget {
     required this.state,
     required this.locale,
     required this.settings,
+    required this.panelMinHeight,
   });
 
   final TapeSessionState state;
   final String locale;
   final DisplaySettings settings;
+  final double panelMinHeight;
 
   @override
   Widget build(BuildContext context) {
     const visibleLineCount = 7;
-    const historyLineHeight = 22.0;
+    const historyLineHeight = 32.0;
     final lines = state.lines.reversed
         .take(visibleLineCount)
         .toList()
@@ -847,78 +910,99 @@ class _FinanceDigitalPanel extends StatelessWidget {
       settings: settings,
     );
 
-    return Container(
+    final currentStyle = const TextStyle(
+      color: Color(0xFFB8FF4A),
+      fontWeight: FontWeight.w700,
+      fontSize: 28,
+      fontFeatures: [FontFeature.tabularFigures()],
+    );
+
+    return SizedBox(
       width: double.infinity,
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color: const Color(0xFF253322),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFF4A5A45)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          ...List.generate(visibleLineCount, (i) {
-            final row = i < lines.length ? lines[i] : null;
-            if (row == null) {
-              return const SizedBox(height: historyLineHeight);
-            }
-            final amount = NumberDisplayFormatter.format(
-              raw: row.amount.toString(),
-              locale: locale,
-              settings: settings,
-            );
-            final left = row.expression ?? '';
-            return SizedBox(
-              height: historyLineHeight,
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      left,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Color(0xFF8BD13A),
-                        fontSize: 14,
-                      ),
-                    ),
-                  ),
-                  Text(
-                    amount,
-                    style: const TextStyle(
-                      color: Color(0xFFB8FF4A),
-                      fontSize: 15,
-                      fontFeatures: [FontFeature.tabularFigures()],
-                    ),
-                  ),
-                ],
-              ),
-            );
-          }),
-          if (headerExpression.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(top: 2),
-              child: Text(
-                headerExpression,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.right,
-                style: const TextStyle(color: Color(0xFF8BD13A), fontSize: 13),
+      height: panelMinHeight,
+      child: Container(
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: const Color(0xFF253322),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: const Color(0xFF4A5A45)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    ...List.generate(visibleLineCount, (i) {
+                      final row = i < lines.length ? lines[i] : null;
+                      if (row == null) {
+                        return const SizedBox(height: historyLineHeight);
+                      }
+                      final amount = NumberDisplayFormatter.format(
+                        raw: row.amount.toString(),
+                        locale: locale,
+                        settings: settings,
+                      );
+                      final left = row.expression ?? '';
+                      return SizedBox(
+                        height: historyLineHeight,
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(
+                              child: Text(
+                                left,
+                                maxLines: 2,
+                                softWrap: true,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: Color(0xFF8BD13A),
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ),
+                            Text(
+                              amount,
+                              style: const TextStyle(
+                                color: Color(0xFFB8FF4A),
+                                fontSize: 15,
+                                fontFeatures: [FontFeature.tabularFigures()],
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }),
+                  ],
+                ),
               ),
             ),
-          const Divider(height: 10, color: Color(0x664A5A45)),
-          Text(
-            current,
-            textAlign: TextAlign.right,
-            style: const TextStyle(
-              color: Color(0xFFB8FF4A),
-              fontWeight: FontWeight.w700,
-              fontSize: 28,
-              fontFeatures: [FontFeature.tabularFigures()],
+            if (headerExpression.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: Text(
+                  headerExpression,
+                  maxLines: 2,
+                  softWrap: true,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.right,
+                  style: const TextStyle(
+                    color: Color(0xFF8BD13A),
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+            const SizedBox(height: 4),
+            const Divider(height: 10, color: Color(0x664A5A45)),
+            Text(
+              current,
+              textAlign: TextAlign.right,
+              style: currentStyle,
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -943,11 +1027,17 @@ class _FinanceKeypad extends StatelessWidget {
     required this.controller,
     required this.settings,
     required this.fxRates,
+    required this.compactScale,
+    required this.gap,
+    required this.keyHeight,
   });
 
-  final TapeController controller;
+  final FinanceTapeController controller;
   final DisplaySettings settings;
   final _EffectiveFxRates fxRates;
+  final double compactScale;
+  final double gap;
+  final double keyHeight;
 
   @override
   Widget build(BuildContext context) {
@@ -993,26 +1083,27 @@ class _FinanceKeypad extends StatelessWidget {
       builder: (context, constraints) {
         const cols = 5;
         const rows = 6;
-        const gap = 8.0;
         final minKeyHeight = settings.tapeKeyHeight.toDouble();
         final keyWidth = (constraints.maxWidth - ((cols - 1) * gap)) / cols;
         final availableHeight = constraints.maxHeight.isFinite
             ? constraints.maxHeight
             : (rows * minKeyHeight) + ((rows - 1) * gap);
-        final keyHeight = math
-            .min(minKeyHeight, (availableHeight - ((rows - 1) * gap)) / rows)
-            .clamp(34.0, minKeyHeight);
+        final adjustedKeyHeight = math.min(
+          keyHeight,
+          (availableHeight - ((rows - 1) * gap)) / rows,
+        ).clamp(30.0, minKeyHeight);
 
         return SizedBox(
           height: availableHeight,
           child: Stack(
             children: specs.map((spec) {
               final left = spec.col * (keyWidth + gap);
-              final top = spec.row * (keyHeight + gap);
+              final top = spec.row * (adjustedKeyHeight + gap);
               final width =
                   (spec.colSpan * keyWidth) + ((spec.colSpan - 1) * gap);
               final height =
-                  (spec.rowSpan * keyHeight) + ((spec.rowSpan - 1) * gap);
+                  (spec.rowSpan * adjustedKeyHeight) +
+                  ((spec.rowSpan - 1) * gap);
               final isOperator = [
                 '÷',
                 '×',

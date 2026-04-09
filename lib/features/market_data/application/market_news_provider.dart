@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -12,7 +13,10 @@ final marketNewsProvider = FutureProvider<List<MarketNewsItem>>((ref) async {
   ref.onDispose(client.close);
 
   final service = MarketNewsService(client: client);
-  return service.fetchAll(settings.marketNewsSources);
+  return service.fetchAll(
+    settings.marketNewsSources,
+    selectedSource: settings.marketNewsSelectedSource,
+  );
 });
 
 class MarketNewsService {
@@ -20,7 +24,10 @@ class MarketNewsService {
 
   final http.Client client;
 
-  Future<List<MarketNewsItem>> fetchAll(List<String> sources) async {
+  Future<List<MarketNewsItem>> fetchAll(
+    List<String> sources, {
+    String selectedSource = '',
+  }) async {
     final items = <MarketNewsItem>[];
     for (final rawUrl in sources) {
       final normalizedUrl =
@@ -28,12 +35,18 @@ class MarketNewsService {
               'https://bigpara.hurriyet.com.tr/haberler/sondakika-haberleri/'
           ? 'https://bigpara.hurriyet.com.tr/rss/'
           : rawUrl.trim();
+      if (selectedSource.trim().isNotEmpty &&
+          !_sourceMatches(normalizedUrl, selectedSource)) {
+        continue;
+      }
       final uri = Uri.tryParse(normalizedUrl);
       if (uri == null) continue;
       try {
         final response = await client.get(uri);
         if (response.statusCode != 200) continue;
-        items.addAll(_parse(uri, response.body));
+        items.addAll(
+          _parse(uri, utf8.decode(response.bodyBytes, allowMalformed: true)),
+        );
       } catch (_) {
         continue;
       }
@@ -53,6 +66,15 @@ class MarketNewsService {
         .where((item) => deduped.add('${item.sourceLabel}|${item.title}'))
         .take(20)
         .toList();
+  }
+
+  bool _sourceMatches(String normalizedUrl, String selectedSource) {
+    final selected = selectedSource.trim();
+    if (selected.isEmpty) return true;
+    if (normalizedUrl == selected) return true;
+    final normalizedHost = Uri.tryParse(normalizedUrl)?.host ?? '';
+    final selectedHost = Uri.tryParse(selected)?.host ?? '';
+    return normalizedHost.isNotEmpty && normalizedHost == selectedHost;
   }
 
   List<MarketNewsItem> _parse(Uri uri, String body) {

@@ -53,34 +53,45 @@ class TapeScreen extends ConsumerWidget {
                   keypadGap,
             );
 
-            return Column(
-              children: [
-                Expanded(
-                  child: ConstrainedBox(
-                    constraints: BoxConstraints(minHeight: paperMinHeight),
-                    child: _TapePaper(
-                      state: state,
-                      locale: locale,
-                      settings: settings,
-                    ),
+            return SingleChildScrollView(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                child: IntrinsicHeight(
+                  child: Column(
+                    children: [
+                      Expanded(
+                        child: ConstrainedBox(
+                          constraints: BoxConstraints(minHeight: paperMinHeight),
+                          child: _TapePaper(
+                            state: state,
+                            locale: locale,
+                            settings: settings,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: displayGap),
+                      _TapeDisplay(
+                        state: state,
+                        locale: locale,
+                        settings: settings,
+                      ),
+                      const SizedBox(height: keypadGap),
+                      Align(
+                        alignment: Alignment.bottomCenter,
+                        child: SizedBox(
+                          width: double.infinity,
+                          height: keypadHeight,
+                          child: _TapeKeypad(
+                            controller: controller,
+                            settings: settings,
+                            fxRates: fxRates,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                const SizedBox(height: displayGap),
-                _TapeDisplay(state: state, locale: locale, settings: settings),
-                const SizedBox(height: keypadGap),
-                Align(
-                  alignment: Alignment.bottomCenter,
-                  child: SizedBox(
-                    width: double.infinity,
-                    height: keypadHeight,
-                    child: _TapeKeypad(
-                      controller: controller,
-                      settings: settings,
-                      fxRates: fxRates,
-                    ),
-                  ),
-                ),
-              ],
+              ),
             );
           },
         ),

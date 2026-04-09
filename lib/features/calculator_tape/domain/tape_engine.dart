@@ -284,7 +284,7 @@ class TapeEngine {
     return state.copyWith(
       inputBuffer: result.toString(),
       lastInterimResult: result,
-      pendingExpression: '$expression = ${result.toString()}',
+      pendingExpression: expression,
       clearPendingOperation: true,
       clearPendingLeftOperand: true,
     );

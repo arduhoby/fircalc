@@ -112,6 +112,22 @@ class DisplaySettingsController extends Notifier<DisplaySettings> {
         .map((item) => item.trim())
         .where((item) => item.isNotEmpty)
         .toList();
-    return _mutate((current) => current.copyWith(marketNewsSources: cleaned));
+    return _mutate((current) {
+      final selected = current.marketNewsSelectedSource;
+      final nextSelected = cleaned.contains(selected) ? selected : '';
+      return current.copyWith(
+        marketNewsSources: cleaned,
+        marketNewsSelectedSource: nextSelected,
+      );
+    });
+  }
+
+  Future<void> setMarketNewsSelectedSource(String source) {
+    final cleaned = source.trim();
+    return _mutate(
+      (current) => current.copyWith(
+        marketNewsSelectedSource: cleaned,
+      ),
+    );
   }
 }

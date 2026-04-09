@@ -20,32 +20,29 @@ class FinanceCalculators {
   static DecimalValue simpleInterest({
     required DecimalValue principal,
     required DecimalValue annualRate,
-    required int years,
+    required int days,
   }) {
+    if (days < 0) {
+      throw ArgumentError('Gün negatif olamaz.');
+    }
     final interest = annualRate
         .percentOf(principal)
-        .times(DecimalValue.fromInt(years));
+        .times(DecimalValue.parse((days / 365).toStringAsFixed(8)));
     return principal.plus(interest);
   }
 
   static DecimalValue compoundInterest({
     required DecimalValue principal,
     required DecimalValue annualRate,
-    required int years,
-    int compoundsPerYear = 1,
+    required int days,
   }) {
-    if (years < 0) {
-      throw ArgumentError('Yıl negatif olamaz.');
-    }
-    if (compoundsPerYear <= 0) {
-      throw ArgumentError('Yılda bileşikleme sayısı pozitif olmalı.');
+    if (days < 0) {
+      throw ArgumentError('Gün negatif olamaz.');
     }
 
     final p = _toDouble(principal);
     final r = _toRate(annualRate);
-    final m = compoundsPerYear.toDouble();
-    final n = years.toDouble();
-    final fv = p * math.pow(1 + (r / m), m * n);
+    final fv = p * math.pow(1 + (r / 365), days.toDouble());
     return _toDecimal(fv);
   }
 
