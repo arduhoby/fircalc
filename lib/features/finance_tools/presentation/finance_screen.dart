@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
@@ -35,22 +36,56 @@ class FinanceScreen extends ConsumerWidget {
     return SafeArea(
       child: Padding(
         padding: const EdgeInsets.all(12),
-        child: Column(
-          children: [
-            _FinanceDigitalPanel(
-              state: state,
-              locale: locale,
-              settings: settings,
-            ),
-            const SizedBox(height: 8),
-            _FinanceFormulaBar(controller: controller),
-            const SizedBox(height: 8),
-            _FinanceKeypad(
-              controller: controller,
-              settings: settings,
-              fxRates: fxRates,
-            ),
-          ],
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            const keypadGap = 8.0;
+            const keypadRows = 6;
+            final formulaButtonHeight = (settings.tapeKeyHeight - 6)
+                .clamp(34, 52)
+                .toDouble();
+            final formulaHeight = (2 * formulaButtonHeight) + keypadGap;
+            final keypadHeight =
+                (keypadRows * settings.tapeKeyHeight.toDouble()) +
+                ((keypadRows - 1) * keypadGap);
+            final topMinHeight = math.max(
+              140.0,
+              constraints.maxHeight - keypadHeight - formulaHeight - 16,
+            );
+            return SizedBox.expand(
+              child: Column(
+                children: [
+                  Expanded(
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(minHeight: topMinHeight),
+                      child: _FinanceDigitalPanel(
+                        state: state,
+                        locale: locale,
+                        settings: settings,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  _FinanceFormulaBar(
+                    controller: controller,
+                    settings: settings,
+                  ),
+                  const SizedBox(height: keypadGap),
+                  Align(
+                    alignment: Alignment.bottomCenter,
+                    child: SizedBox(
+                      width: double.infinity,
+                      height: keypadHeight,
+                      child: _FinanceKeypad(
+                        controller: controller,
+                        settings: settings,
+                        fxRates: fxRates,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
         ),
       ),
     );
@@ -58,94 +93,151 @@ class FinanceScreen extends ConsumerWidget {
 }
 
 class _FinanceFormulaBar extends StatelessWidget {
-  const _FinanceFormulaBar({required this.controller});
+  const _FinanceFormulaBar({required this.controller, required this.settings});
 
   final TapeController controller;
+  final DisplaySettings settings;
 
   @override
   Widget build(BuildContext context) {
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: [
-        FilledButton.tonal(
-          onPressed: () async {
-            final result = await _openTvmSheet(context);
-            if (result == null) return;
-            controller.applyFormulaResult(
-              expression: result.expression,
-              result: result.result.toString(),
-            );
-          },
-          child: const Text('TVM'),
+    final specs = [
+      (
+        label: 'TVM',
+        tooltip: 'Zaman degeri hesaplari: PV, FV ve PMT cozer.',
+        action: () async => _applyResult(await _openTvmSheet(context)),
+      ),
+      (
+        label: 'AMORT',
+        tooltip:
+            'Kredi amortismaninda faiz, anapara ve bakiye dagilimini verir.',
+        action: () async => _applyResult(await _openAmortSheet(context)),
+      ),
+      (
+        label: 'CF',
+        tooltip: 'Nakit akislarindan NPV veya IRR hesaplar.',
+        action: () async => _applyResult(await _openCashFlowSheet(context)),
+      ),
+      (
+        label: 'NOM/EFF',
+        tooltip: 'Nominal ve efektif faiz donusumu yapar. Anapara gerekmez.',
+        action: () async =>
+            _applyResult(await _openRateConversionSheet(context)),
+      ),
+      (
+        label: 'PMT',
+        tooltip: 'Taksit tutarini hesaplar.',
+        action: () async => _applyResult(await _openQuickPmtSheet(context)),
+      ),
+      (
+        label: 'S. FAIZ',
+        tooltip: 'Basit faizle vade sonu tutari hesaplar.',
+        action: () async =>
+            _applyResult(await _openSimpleInterestSheet(context)),
+      ),
+      (
+        label: 'B. FAIZ',
+        tooltip: 'Bilesik faizle vade sonu tutari hesaplar.',
+        action: () async =>
+            _applyResult(await _openCompoundInterestSheet(context)),
+      ),
+      (
+        label: 'F1',
+        tooltip: 'Ayarlardan tanimlanacak.',
+        action: () async => _showFunctionMessage(context, 'F1'),
+      ),
+      (
+        label: 'F2',
+        tooltip: 'Ayarlardan tanimlanacak.',
+        action: () async => _showFunctionMessage(context, 'F2'),
+      ),
+      (
+        label: 'F3',
+        tooltip: 'Ayarlardan tanimlanacak.',
+        action: () async => _showFunctionMessage(context, 'F3'),
+      ),
+    ];
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        const cols = 5;
+        const rows = 2;
+        const gap = 8.0;
+        final buttonHeight = (settings.tapeKeyHeight - 6)
+            .clamp(34, 52)
+            .toDouble();
+        final buttonWidth = (constraints.maxWidth - ((cols - 1) * gap)) / cols;
+        final totalHeight = (rows * buttonHeight) + gap;
+
+        return SizedBox(
+          height: totalHeight,
+          child: Stack(
+            children: List.generate(specs.length, (index) {
+              final spec = specs[index];
+              final row = index ~/ cols;
+              final col = index % cols;
+              return Positioned(
+                left: col * (buttonWidth + gap),
+                top: row * (buttonHeight + gap),
+                width: buttonWidth,
+                height: buttonHeight,
+                child: _formulaButton(
+                  context,
+                  label: spec.label,
+                  tooltip: spec.tooltip,
+                  onPressed: spec.action,
+                ),
+              );
+            }),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _formulaButton(
+    BuildContext context, {
+    required String label,
+    required String tooltip,
+    required Future<void> Function() onPressed,
+  }) {
+    return Tooltip(
+      message: tooltip,
+      waitDuration: const Duration(milliseconds: 300),
+      child: FilledButton(
+        style: FilledButton.styleFrom(
+          backgroundColor: const Color(0xFFF5E6A7),
+          foregroundColor: const Color(0xFF4C3A00),
+          minimumSize: Size.zero,
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
         ),
-        FilledButton.tonal(
-          onPressed: () async {
-            final result = await _openAmortSheet(context);
-            if (result == null) return;
-            controller.applyFormulaResult(
-              expression: result.expression,
-              result: result.result.toString(),
-            );
-          },
-          child: const Text('AMORT'),
+        onPressed: () => unawaited(onPressed()),
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(
+            label,
+            maxLines: 1,
+            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+          ),
         ),
-        FilledButton.tonal(
-          onPressed: () async {
-            final result = await _openCashFlowSheet(context);
-            if (result == null) return;
-            controller.applyFormulaResult(
-              expression: result.expression,
-              result: result.result.toString(),
-            );
-          },
-          child: const Text('CF'),
-        ),
-        FilledButton.tonal(
-          onPressed: () async {
-            final result = await _openRateConversionSheet(context);
-            if (result == null) return;
-            controller.applyFormulaResult(
-              expression: result.expression,
-              result: result.result.toString(),
-            );
-          },
-          child: const Text('NOM/EFF'),
-        ),
-        FilledButton.tonal(
-          onPressed: () async {
-            final result = await _openQuickPmtSheet(context);
-            if (result == null) return;
-            controller.applyFormulaResult(
-              expression: result.expression,
-              result: result.result.toString(),
-            );
-          },
-          child: const Text('PMT'),
-        ),
-        FilledButton.tonal(
-          onPressed: () async {
-            final result = await _openSimpleInterestSheet(context);
-            if (result == null) return;
-            controller.applyFormulaResult(
-              expression: result.expression,
-              result: result.result.toString(),
-            );
-          },
-          child: const Text('S. FAİZ'),
-        ),
-        FilledButton.tonal(
-          onPressed: () async {
-            final result = await _openCompoundInterestSheet(context);
-            if (result == null) return;
-            controller.applyFormulaResult(
-              expression: result.expression,
-              result: result.result.toString(),
-            );
-          },
-          child: const Text('B. FAİZ'),
-        ),
-      ],
+      ),
+    );
+  }
+
+  Future<void> _showFunctionMessage(BuildContext context, String label) async {
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text('$label ayarlardan tanimlanacak.')));
+  }
+
+  void _applyResult(_FormulaResult? result) {
+    if (result == null) return;
+    controller.applyFormulaResult(
+      expression: result.expression,
+      result: result.result.toString(),
     );
   }
 
@@ -172,6 +264,10 @@ class _FinanceFormulaBar extends StatelessWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
+                const Text(
+                  'TVM: Para zaman degeri. PV, FV veya PMT cozumleri icin kullanilir.',
+                ),
+                const SizedBox(height: 8),
                 DropdownButton<_TvmSolve>(
                   value: solve,
                   items: const [
@@ -342,6 +438,8 @@ class _FinanceFormulaBar extends StatelessWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
+                const Text('CF: Nakit akislarindan NPV veya IRR hesaplar.'),
+                const SizedBox(height: 8),
                 DropdownButton<_CashFlowSolve>(
                   value: mode,
                   items: const [
@@ -435,6 +533,10 @@ class _FinanceFormulaBar extends StatelessWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
+                const Text(
+                  'NOM/EFF: Nominal ve efektif faiz donusumu. Bu islemde anapara gerekmez.',
+                ),
+                const SizedBox(height: 8),
                 DropdownButton<_RateSolve>(
                   value: mode,
                   items: const [
@@ -892,12 +994,17 @@ class _FinanceKeypad extends StatelessWidget {
         const cols = 5;
         const rows = 6;
         const gap = 8.0;
-        final keyHeight = settings.tapeKeyHeight.toDouble();
+        final minKeyHeight = settings.tapeKeyHeight.toDouble();
         final keyWidth = (constraints.maxWidth - ((cols - 1) * gap)) / cols;
-        final totalHeight = (rows * keyHeight) + ((rows - 1) * gap);
+        final availableHeight = constraints.maxHeight.isFinite
+            ? constraints.maxHeight
+            : (rows * minKeyHeight) + ((rows - 1) * gap);
+        final keyHeight = math
+            .min(minKeyHeight, (availableHeight - ((rows - 1) * gap)) / rows)
+            .clamp(34.0, minKeyHeight);
 
         return SizedBox(
-          height: totalHeight,
+          height: availableHeight,
           child: Stack(
             children: specs.map((spec) {
               final left = spec.col * (keyWidth + gap);
@@ -1043,8 +1150,8 @@ class _FinanceKeypad extends StatelessWidget {
   Future<void> _handleAuxCurrency(BuildContext context, String key) async {
     final currency = switch (key) {
       r'$' => 'USD',
-      'E' => 'EUR',
-      '&' => 'GBP',
+      '€' => 'EUR',
+      '£' => 'GBP',
       _ => null,
     };
     if (currency == null) return;
@@ -1056,7 +1163,12 @@ class _FinanceKeypad extends StatelessWidget {
       _ => null,
     };
 
-    if (rate == null) return;
+    if (rate == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$currency guncel satis verisi bulunamadi')),
+      );
+      return;
+    }
     controller.applyEffectiveFxRate(
       currencyLabel: currency,
       rate: rate.toString(),
@@ -1093,16 +1205,17 @@ class _EffectiveFxRates {
   final DecimalValue? eur;
   final DecimalValue? gbp;
 
-  factory _EffectiveFxRates.empty() => _EffectiveFxRates(
-    usd: DecimalValue.parse('38.3400'),
-    eur: DecimalValue.parse('41.2400'),
-    gbp: DecimalValue.parse('48.2700'),
-  );
+  factory _EffectiveFxRates.empty() =>
+      _EffectiveFxRates(usd: null, eur: null, gbp: null);
 
   factory _EffectiveFxRates.fromSnapshots(List<FxRateSnapshot> snapshots) {
     DecimalValue? pick(String code) {
       for (final s in snapshots) {
         if (s.kind != FxRateKind.effective) continue;
+        if (s.currency.code == code) return s.sell;
+      }
+      for (final s in snapshots) {
+        if (s.kind != FxRateKind.daily) continue;
         if (s.currency.code == code) return s.sell;
       }
       return null;

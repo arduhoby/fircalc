@@ -1,11 +1,13 @@
+const int maxMarketStockSymbols = 20;
+
 enum TapeAuxKeyOption { none, dollar, e, ampersand }
 
 extension TapeAuxKeyOptionX on TapeAuxKeyOption {
   String get label => switch (this) {
     TapeAuxKeyOption.none => 'Boş',
     TapeAuxKeyOption.dollar => r'$',
-    TapeAuxKeyOption.e => 'E',
-    TapeAuxKeyOption.ampersand => '&',
+    TapeAuxKeyOption.e => '€',
+    TapeAuxKeyOption.ampersand => '£',
   };
 }
 
@@ -19,6 +21,9 @@ class DisplaySettings {
     required this.tapeKeyHeight,
     required this.tapeAuxLeft,
     required this.tapeAuxRight,
+    required this.marketPriceDigits,
+    required this.marketStockSymbols,
+    required this.marketNewsSources,
   });
 
   factory DisplaySettings.initial() => const DisplaySettings(
@@ -27,9 +32,12 @@ class DisplaySettings {
     tapeKeySoundEnabled: true,
     vatRatePercent: 18,
     tapeSaveModeEnabled: false,
-    tapeKeyHeight: 50,
+    tapeKeyHeight: 47,
     tapeAuxLeft: TapeAuxKeyOption.dollar,
     tapeAuxRight: TapeAuxKeyOption.e,
+    marketPriceDigits: 2,
+    marketStockSymbols: [],
+    marketNewsSources: ['https://bigpara.hurriyet.com.tr/rss/'],
   );
 
   final int decimalDigits;
@@ -40,6 +48,9 @@ class DisplaySettings {
   final int tapeKeyHeight;
   final TapeAuxKeyOption tapeAuxLeft;
   final TapeAuxKeyOption tapeAuxRight;
+  final int marketPriceDigits;
+  final List<String> marketStockSymbols;
+  final List<String> marketNewsSources;
 
   DisplaySettings copyWith({
     int? decimalDigits,
@@ -50,6 +61,9 @@ class DisplaySettings {
     int? tapeKeyHeight,
     TapeAuxKeyOption? tapeAuxLeft,
     TapeAuxKeyOption? tapeAuxRight,
+    int? marketPriceDigits,
+    List<String>? marketStockSymbols,
+    List<String>? marketNewsSources,
   }) {
     return DisplaySettings(
       decimalDigits: decimalDigits ?? this.decimalDigits,
@@ -60,6 +74,9 @@ class DisplaySettings {
       tapeKeyHeight: tapeKeyHeight ?? this.tapeKeyHeight,
       tapeAuxLeft: tapeAuxLeft ?? this.tapeAuxLeft,
       tapeAuxRight: tapeAuxRight ?? this.tapeAuxRight,
+      marketPriceDigits: marketPriceDigits ?? this.marketPriceDigits,
+      marketStockSymbols: marketStockSymbols ?? this.marketStockSymbols,
+      marketNewsSources: marketNewsSources ?? this.marketNewsSources,
     );
   }
 }

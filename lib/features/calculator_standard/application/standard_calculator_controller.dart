@@ -27,6 +27,61 @@ class StandardCalculatorController extends Notifier<StandardCalculatorState> {
   void clearEntry() => state = _engine.clearEntry(state);
   void toggleSign() => state = _engine.toggleSign(state);
   void percent() => state = _engine.percent(state);
+  void circleArea(double radius) =>
+      state = _engine.circleArea(state, radius: radius);
+  void rectangleArea({required double shortSide, required double longSide}) =>
+      state = _engine.rectangleArea(
+        state,
+        shortSide: shortSide,
+        longSide: longSide,
+      );
+  void quadrilateralArea(List<QuadrilateralPoint> points) =>
+      state = _engine.quadrilateralArea(state, points: points);
+  void latLonArea(List<LatLonPoint> points) =>
+      state = _engine.latLonArea(state, points: points);
+  void random(RandomGenerationRequest request) =>
+      state = _engine.generateRandom(state, request: request);
+  void convertUnit({
+    required ConvertUnit from,
+    required ConvertUnit to,
+    required double value,
+  }) => state = _engine.convertUnit(state, from: from, to: to, value: value);
+  void electricOhmLaw({
+    required ElectricOhmTarget target,
+    double? voltage,
+    double? current,
+    double? resistance,
+  }) => state = _engine.electricOhmLaw(
+    state,
+    target: target,
+    voltage: voltage,
+    current: current,
+    resistance: resistance,
+  );
+  void electricPower({
+    required ElectricPowerTarget target,
+    double? power,
+    double? voltage,
+    double? current,
+  }) => state = _engine.electricPower(
+    state,
+    target: target,
+    power: power,
+    voltage: voltage,
+    current: current,
+  );
+  DateDifferenceResult calculateDateDifference(DateTime start, DateTime end) =>
+      _engine.calculateDateDifference(start, end);
+  void applyTextResult({
+    required String display,
+    required String historyLabel,
+    String? currentInput,
+  }) => state = _engine.applyTextResult(
+    state,
+    display: display,
+    historyLabel: historyLabel,
+    currentInput: currentInput,
+  );
 
   void memoryStore(MemorySlot slot) => state = _engine.memoryStore(state, slot);
   void memoryRecall(MemorySlot slot) =>

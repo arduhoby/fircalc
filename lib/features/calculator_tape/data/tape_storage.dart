@@ -5,7 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
+import 'package:sqflite/sqflite.dart' show getDatabasesPath;
 import 'package:sqlite3/sqlite3.dart';
 
 import '../../../core/types/decimal_value.dart';
@@ -138,9 +138,9 @@ class TapeStorage {
     if (kIsWeb) {
       return sqlite3.openInMemory();
     }
-    final dir = await getApplicationSupportDirectory();
-    await Directory(dir.path).create(recursive: true);
-    final dbPath = p.join(dir.path, 'tape_sessions.sqlite');
+    final dbDir = await getDatabasesPath();
+    await Directory(dbDir).create(recursive: true);
+    final dbPath = p.join(dbDir, 'tape_sessions.sqlite');
     return sqlite3.open(dbPath);
   }
 

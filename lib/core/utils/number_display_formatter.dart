@@ -8,7 +8,8 @@ class NumberDisplayFormatter {
     required String locale,
     required DisplaySettings settings,
   }) {
-    final normalized = raw.replaceAll(',', '.').trim();
+    final trimmed = raw.trim();
+    final normalized = trimmed.replaceAll(',', '.');
 
     // Keep in-progress input like "12." visible while typing.
     if (normalized.endsWith('.')) {
@@ -18,16 +19,17 @@ class NumberDisplayFormatter {
       return '$head$decimal';
     }
 
-    return _formatParsed(normalized, locale, settings);
+    return _formatParsed(normalized, locale, settings, fallback: trimmed);
   }
 
   static String _formatParsed(
     String normalized,
     String locale,
-    DisplaySettings settings,
-  ) {
+    DisplaySettings settings, {
+    String? fallback,
+  }) {
     final value = double.tryParse(normalized);
-    if (value == null) return normalized;
+    if (value == null) return fallback ?? normalized;
 
     if (settings.useGrouping) {
       return NumberFormat.decimalPatternDigits(

@@ -10,6 +10,8 @@ import '../data/in_memory_market_repository.dart';
 import '../data/tcmb_evds_repository.dart';
 import '../domain/market_models.dart';
 import 'quote_fallback_service.dart';
+import '../../settings/application/display_settings_controller.dart';
+import '../../settings/domain/display_settings.dart';
 
 final tcmbApiKeyProvider = Provider<String>((ref) {
   return const String.fromEnvironment('TCMB_API_KEY', defaultValue: '');
@@ -118,21 +120,26 @@ final trackedMarketWatchProvider = FutureProvider<List<MarketWatchSnapshot>>((
 ) async {
   final now = DateTime.now();
   final fx = await ref.watch(trackedFxRatesProvider.future);
+  final settings = ref.watch(displaySettingsProvider);
   final usdTry = _resolveUsdTry(fx);
+  final stockRows = await _fetchStocksAuto(
+    symbols: settings.marketStockSymbols,
+  );
   if (usdTry != null) {
     final live = await _fetchMarketWatchFromYahoo(usdTry: usdTry, now: now);
-    if (live.isNotEmpty) return live;
+    if (live.isNotEmpty) return [...live, ...stockRows];
   }
 
-  return _fallbackMarketWatch(now);
+  return [..._fallbackMarketWatch(now), ...stockRows];
 });
 
 Future<List<MarketWatchSnapshot>> _fetchMarketWatchFromYahoo({
   required DecimalValue usdTry,
   required DateTime now,
 }) async {
+  const symbolQuery = 'BTC-USD,ETH-USD,BZ=F,GC=F';
   final uri = Uri.parse(
-    'https://query1.finance.yahoo.com/v7/finance/quote?symbols=BTC-USD,ETH-USD,BZ=F,GC=F',
+    'https://query1.finance.yahoo.com/v7/finance/quote?symbols=$symbolQuery',
   );
   try {
     final response = await http.get(uri);
@@ -175,8 +182,8 @@ Future<List<MarketWatchSnapshot>> _fetchMarketWatchFromYahoo({
         code: 'BTC',
         name: 'Bitcoin',
         kind: MarketWatchKind.crypto,
-        priceTry: asDecimal(btc * usdTryDouble),
-        unit: 'TRY',
+        priceTry: asDecimal(btc),
+        unit: 'USD',
         timestamp: now,
         source: DataSourceType.apiFallback,
         status: MarketDataStatus.live,
@@ -185,8 +192,8 @@ Future<List<MarketWatchSnapshot>> _fetchMarketWatchFromYahoo({
         code: 'ETH',
         name: 'Ethereum',
         kind: MarketWatchKind.crypto,
-        priceTry: asDecimal(eth * usdTryDouble),
-        unit: 'TRY',
+        priceTry: asDecimal(eth),
+        unit: 'USD',
         timestamp: now,
         source: DataSourceType.apiFallback,
         status: MarketDataStatus.live,
@@ -202,7 +209,7 @@ Future<List<MarketWatchSnapshot>> _fetchMarketWatchFromYahoo({
         status: MarketDataStatus.live,
       ),
       MarketWatchSnapshot(
-        code: 'ALT_CEYREK',
+        code: 'CEYREK',
         name: 'Çeyrek Altın',
         kind: MarketWatchKind.preciousMetal,
         priceTry: asDecimal(quarterGoldTry),
@@ -215,8 +222,8 @@ Future<List<MarketWatchSnapshot>> _fetchMarketWatchFromYahoo({
         code: 'BRENT',
         name: 'Brent Petrol',
         kind: MarketWatchKind.energy,
-        priceTry: asDecimal(brent * usdTryDouble),
-        unit: 'TRY/varil',
+        priceTry: asDecimal(brent),
+        unit: 'USD',
         timestamp: now,
         source: DataSourceType.apiFallback,
         status: MarketDataStatus.live,
@@ -225,6 +232,227 @@ Future<List<MarketWatchSnapshot>> _fetchMarketWatchFromYahoo({
   } catch (_) {
     return const [];
   }
+}
+
+Future<List<MarketWatchSnapshot>> _fetchStocksAuto({
+  required List<String> symbols,
+}) async {
+  final rows = <MarketWatchSnapshot>[];
+  for (final symbol in symbols.take(maxMarketStockSymbols)) {
+    final code = symbol.trim().toUpperCase();
+    if (code.isEmpty) continue;
+    final item =
+        await _fetchStockFromBigpara(code) ?? await _fetchStockFromYahoo(code);
+    if (item != null) {
+      rows.add(item);
+    }
+  }
+  return rows;
+}
+
+Future<MarketWatchSnapshot?> _fetchStockFromBigpara(String rawCode) async {
+  final code = rawCode.replaceAll('.IS', '');
+  final uri = Uri.parse(
+    'https://bigpara.hurriyet.com.tr/api/v1/borsa/hisseyuzeysel/$code',
+  );
+  try {
+    final response = await http.get(uri);
+    if (response.statusCode != 200) return null;
+    final body = jsonDecode(response.body);
+    if (body is! Map<String, dynamic>) return null;
+    if (body['code']?.toString() != '0') return null;
+    final data = body['data'];
+    if (data is! Map<String, dynamic>) return null;
+    final stock = data['hisseYuzeysel'];
+    if (stock is! Map<String, dynamic>) return null;
+
+    DecimalValue? pick(String key) {
+      final value = stock[key];
+      if (value == null) return null;
+      try {
+        return DecimalValue.parse(value.toString());
+      } catch (_) {
+        return null;
+      }
+    }
+
+    final timestamp =
+        DateTime.tryParse(stock['tarih']?.toString() ?? '') ?? DateTime.now();
+    final sell = pick('satis') ?? pick('kapanis') ?? pick('alis');
+    if (sell == null) return null;
+
+    return MarketWatchSnapshot(
+      code: stock['sembol']?.toString() ?? code,
+      name: stock['aciklama']?.toString() ?? '$code Hisse',
+      kind: MarketWatchKind.stock,
+      priceTry: sell,
+      openTry: pick('acilis') ?? pick('alis'),
+      closeTry: pick('kapanis') ?? pick('dunkukapanis') ?? sell,
+      lowTry: pick('dusuk'),
+      highTry: pick('yuksek'),
+      unit: 'TRY',
+      timestamp: timestamp,
+      source: DataSourceType.apiFallback,
+      status: MarketDataStatus.live,
+    );
+  } catch (_) {
+    return null;
+  }
+}
+
+Future<MarketWatchSnapshot?> _fetchStockFromYahoo(String rawCode) async {
+  final normalized = rawCode.trim().toUpperCase().replaceAll('.IS', '');
+  if (normalized.isEmpty) return null;
+  final uri = Uri.parse(
+    'https://api.nasdaq.com/api/quote/$normalized/info?assetclass=stocks',
+  );
+  try {
+    final response = await http.get(
+      uri,
+      headers: const {
+        'User-Agent': 'Mozilla/5.0',
+        'Accept': 'application/json',
+      },
+    );
+    if (response.statusCode != 200) return null;
+    final body = jsonDecode(response.body);
+    if (body is! Map<String, dynamic>) return null;
+    final data = body['data'];
+    if (data is! Map<String, dynamic>) return null;
+    final primary = data['primaryData'];
+    final secondary = data['secondaryData'];
+    if (primary is! Map<String, dynamic>) return null;
+
+    DecimalValue? parseMoney(dynamic raw) {
+      if (raw == null) return null;
+      final cleaned = raw
+          .toString()
+          .replaceAll('\$', '')
+          .replaceAll(',', '')
+          .replaceAll('%', '')
+          .trim();
+      if (cleaned.isEmpty || cleaned == 'NA') return null;
+      try {
+        return DecimalValue.parse(cleaned);
+      } catch (_) {
+        return null;
+      }
+    }
+
+    final price =
+        parseMoney(primary['lastSalePrice']) ??
+        parseMoney(secondary?['lastSalePrice']);
+    if (price == null) return null;
+
+    return MarketWatchSnapshot(
+      code: data['symbol']?.toString() ?? normalized,
+      name: data['companyName']?.toString() ?? normalized,
+      kind: MarketWatchKind.stock,
+      priceTry: price,
+      openTry: null,
+      closeTry: parseMoney(secondary?['lastSalePrice']) ?? price,
+      lowTry: null,
+      highTry: null,
+      unit: 'USD',
+      timestamp: DateTime.now(),
+      source: DataSourceType.apiFallback,
+      status: MarketDataStatus.live,
+    );
+  } catch (_) {
+    return null;
+  }
+}
+
+Future<List<MarketHistoryPoint>> fetchStockHistory(
+  String code, {
+  DateTime? startDate,
+}) async {
+  final normalized = code.trim().toUpperCase().replaceAll('.IS', '');
+  final nasdaqUri = Uri.parse(
+    'https://api.nasdaq.com/api/quote/$normalized/chart?assetclass=stocks',
+  );
+  try {
+    final response = await http.get(
+      nasdaqUri,
+      headers: const {
+        'User-Agent': 'Mozilla/5.0',
+        'Accept': 'application/json',
+      },
+    );
+    if (response.statusCode == 200) {
+      final body = jsonDecode(response.body);
+      if (body is Map<String, dynamic>) {
+        final data = body['data'];
+        if (data is Map<String, dynamic>) {
+          final chart = data['chart'];
+          if (chart is List && chart.isNotEmpty) {
+            final points = <MarketHistoryPoint>[];
+            for (final entry in chart) {
+              if (entry is! Map) continue;
+              final x = (entry['x'] as num?)?.toInt();
+              final y = (entry['y'] as num?)?.toDouble();
+              if (x == null || y == null) continue;
+              points.add(
+                MarketHistoryPoint(
+                  time: DateTime.fromMillisecondsSinceEpoch(x),
+                  value: DecimalValue.parse(y.toString()),
+                  label: entry['z'] is Map
+                      ? entry['z']['dateTime']?.toString()
+                      : null,
+                ),
+              );
+            }
+            if (points.isNotEmpty) {
+              final filtered = _filterHistory(points, startDate: startDate);
+              return filtered.isNotEmpty ? filtered : points;
+            }
+          }
+        }
+      }
+    }
+  } catch (_) {}
+
+  final bist = await _fetchStockFromBigpara(normalized);
+  if (bist == null) return const [];
+  final close = bist.closeTry ?? bist.priceTry;
+  final open = bist.openTry ?? close;
+  final low = bist.lowTry ?? close;
+  final high = bist.highTry ?? close;
+  final now = bist.timestamp;
+  final fallback = [
+    MarketHistoryPoint(
+      time: now.subtract(const Duration(hours: 3)),
+      value: open,
+      label: 'Acilis',
+    ),
+    MarketHistoryPoint(
+      time: now.subtract(const Duration(hours: 2)),
+      value: low,
+      label: 'Dusuk',
+    ),
+    MarketHistoryPoint(
+      time: now.subtract(const Duration(hours: 1)),
+      value: high,
+      label: 'Yuksek',
+    ),
+    MarketHistoryPoint(time: now, value: close, label: 'Kapanis'),
+  ];
+  return _filterHistory(fallback, startDate: startDate);
+}
+
+List<MarketHistoryPoint> _filterHistory(
+  List<MarketHistoryPoint> points, {
+  DateTime? startDate,
+}) {
+  if (startDate == null) return points;
+  final normalizedStart = DateTime(startDate.year, startDate.month, startDate.day);
+  final now = DateTime.now();
+  return points
+      .where(
+        (point) =>
+            !point.time.isBefore(normalizedStart) && !point.time.isAfter(now),
+      )
+      .toList();
 }
 
 DecimalValue? _resolveUsdTry(List<FxRateSnapshot> fx) {
@@ -246,8 +474,8 @@ List<MarketWatchSnapshot> _fallbackMarketWatch(DateTime now) => [
     code: 'BTC',
     name: 'Bitcoin',
     kind: MarketWatchKind.crypto,
-    priceTry: DecimalValue.parse('2665000'),
-    unit: 'TRY',
+    priceTry: DecimalValue.parse('69450'),
+    unit: 'USD',
     timestamp: now,
     source: DataSourceType.cache,
     status: MarketDataStatus.stale,
@@ -256,8 +484,8 @@ List<MarketWatchSnapshot> _fallbackMarketWatch(DateTime now) => [
     code: 'ETH',
     name: 'Ethereum',
     kind: MarketWatchKind.crypto,
-    priceTry: DecimalValue.parse('129000'),
-    unit: 'TRY',
+    priceTry: DecimalValue.parse('3650'),
+    unit: 'USD',
     timestamp: now,
     source: DataSourceType.cache,
     status: MarketDataStatus.stale,
@@ -273,7 +501,7 @@ List<MarketWatchSnapshot> _fallbackMarketWatch(DateTime now) => [
     status: MarketDataStatus.stale,
   ),
   MarketWatchSnapshot(
-    code: 'ALT_CEYREK',
+    code: 'CEYREK',
     name: 'Çeyrek Altın',
     kind: MarketWatchKind.preciousMetal,
     priceTry: DecimalValue.parse('6720'),
@@ -286,8 +514,8 @@ List<MarketWatchSnapshot> _fallbackMarketWatch(DateTime now) => [
     code: 'BRENT',
     name: 'Brent Petrol',
     kind: MarketWatchKind.energy,
-    priceTry: DecimalValue.parse('3450'),
-    unit: 'TRY/varil',
+    priceTry: DecimalValue.parse('98.4'),
+    unit: 'USD',
     timestamp: now,
     source: DataSourceType.cache,
     status: MarketDataStatus.stale,

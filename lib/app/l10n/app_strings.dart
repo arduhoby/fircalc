@@ -12,6 +12,7 @@ class AppStrings {
   String get tape => isTr ? 'Şerit' : 'Tape';
   String get finance => isTr ? 'Finans' : 'Finance';
   String get market => isTr ? 'Piyasa' : 'Market';
+  String get news => isTr ? 'Haber' : 'News';
   String get history => isTr ? 'Geçmiş' : 'History';
   String get settings => isTr ? 'Ayarlar' : 'Settings';
   String get offline => isTr ? 'Çevrimdışı' : 'Offline';

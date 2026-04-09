@@ -8,6 +8,8 @@ import '../../calculator_tape/application/tape_controller.dart';
 import '../../calculator_tape/presentation/tape_screen.dart';
 import '../../finance_tools/presentation/finance_screen.dart';
 import '../../history/presentation/history_screen.dart';
+import '../../market_data/application/market_news_provider.dart';
+import '../../market_data/application/market_quote_provider.dart';
 import '../../market_data/presentation/market_screen.dart';
 import '../../settings/application/display_settings_controller.dart';
 import '../../settings/presentation/settings_screen.dart';
@@ -20,19 +22,22 @@ class HomeShellScreen extends ConsumerStatefulWidget {
 }
 
 class _HomeShellScreenState extends ConsumerState<HomeShellScreen> {
-  static const _historyIndex = 4;
-  static const _settingsIndex = 5;
+  static const _marketIndex = 3;
+  static const _newsIndex = 4;
+  static const _historyIndex = 5;
+  static const _settingsIndex = 6;
   int _index = 0;
 
   @override
   Widget build(BuildContext context) {
     final strings = AppLocalizations.of(context).strings;
-    final navIndex = _index > 3 ? 0 : _index;
+    final navIndex = _index > _newsIndex ? 0 : _index;
     final pages = const [
       StandardCalculatorScreen(),
       TapeScreen(),
       FinanceScreen(),
       MarketScreen(),
+      MarketNewsScreen(),
       HistoryScreen(),
       SettingsScreen(),
     ];
@@ -42,9 +47,33 @@ class _HomeShellScreenState extends ConsumerState<HomeShellScreen> {
         title: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: Image.asset(
+                'assets/branding/app_logo_tree.png',
+                width: 30,
+                height: 30,
+                fit: BoxFit.cover,
+              ),
+            ),
+            const SizedBox(width: 10),
             Text(AppFlavor.appName),
-            const SizedBox(width: 8),
-            _TapeMenuInAppBar(
+          ],
+        ),
+        actions: [
+          if (_index == _marketIndex || _index == _newsIndex)
+            IconButton(
+              onPressed: () {
+                ref.invalidate(trackedFxRatesProvider);
+                ref.invalidate(trackedMarketWatchProvider);
+                ref.invalidate(marketNewsProvider);
+              },
+              icon: const Icon(Icons.refresh),
+              tooltip: 'Yenile',
+            ),
+          Padding(
+            padding: const EdgeInsets.only(right: 5),
+            child: _TapeMenuInAppBar(
               onChanged: () {
                 if (mounted) setState(() {});
               },
@@ -55,8 +84,8 @@ class _HomeShellScreenState extends ConsumerState<HomeShellScreen> {
                 if (mounted) setState(() => _index = _historyIndex);
               },
             ),
-          ],
-        ),
+          ),
+        ],
       ),
       body: Row(
         children: [
@@ -81,6 +110,10 @@ class _HomeShellScreenState extends ConsumerState<HomeShellScreen> {
                 NavigationRailDestination(
                   icon: const Icon(Icons.candlestick_chart),
                   label: Text(strings.market),
+                ),
+                NavigationRailDestination(
+                  icon: const Icon(Icons.article_outlined),
+                  label: Text(strings.news),
                 ),
               ],
             ),
@@ -107,6 +140,10 @@ class _HomeShellScreenState extends ConsumerState<HomeShellScreen> {
                 NavigationDestination(
                   icon: const Icon(Icons.candlestick_chart),
                   label: strings.market,
+                ),
+                NavigationDestination(
+                  icon: const Icon(Icons.article_outlined),
+                  label: strings.news,
                 ),
               ],
             )

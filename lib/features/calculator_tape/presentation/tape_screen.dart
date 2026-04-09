@@ -35,24 +35,54 @@ class TapeScreen extends ConsumerWidget {
     return SafeArea(
       child: Padding(
         padding: const EdgeInsets.all(12),
-        child: Column(
-          children: [
-            Expanded(
-              child: _TapePaper(
-                state: state,
-                locale: locale,
-                settings: settings,
-              ),
-            ),
-            const SizedBox(height: 8),
-            _TapeDisplay(state: state, locale: locale, settings: settings),
-            const SizedBox(height: 8),
-            _TapeKeypad(
-              controller: controller,
-              settings: settings,
-              fxRates: fxRates,
-            ),
-          ],
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            const keypadGap = 8.0;
+            const keypadRows = 6;
+            final keypadHeight =
+                (keypadRows * settings.tapeKeyHeight.toDouble()) +
+                ((keypadRows - 1) * keypadGap);
+            const displayHeight = 54.0;
+            const displayGap = 8.0;
+            final paperMinHeight = math.max(
+              140.0,
+              constraints.maxHeight -
+                  keypadHeight -
+                  displayHeight -
+                  displayGap -
+                  keypadGap,
+            );
+
+            return Column(
+              children: [
+                Expanded(
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(minHeight: paperMinHeight),
+                    child: _TapePaper(
+                      state: state,
+                      locale: locale,
+                      settings: settings,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: displayGap),
+                _TapeDisplay(state: state, locale: locale, settings: settings),
+                const SizedBox(height: keypadGap),
+                Align(
+                  alignment: Alignment.bottomCenter,
+                  child: SizedBox(
+                    width: double.infinity,
+                    height: keypadHeight,
+                    child: _TapeKeypad(
+                      controller: controller,
+                      settings: settings,
+                      fxRates: fxRates,
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
         ),
       ),
     );
@@ -449,12 +479,20 @@ class _TapeKeypad extends StatelessWidget {
         const rows = 6;
         _validateSpecs(specs, rows: rows, cols: cols);
         const gap = 8.0;
-        final keyHeight = settings.tapeKeyHeight.toDouble();
+        final preferredKeyHeight = settings.tapeKeyHeight.toDouble();
         final keyWidth = (constraints.maxWidth - ((cols - 1) * gap)) / cols;
-        final totalHeight = (rows * keyHeight) + ((rows - 1) * gap);
+        final availableHeight = constraints.maxHeight.isFinite
+            ? constraints.maxHeight
+            : (rows * preferredKeyHeight) + ((rows - 1) * gap);
+        final keyHeight = math
+            .min(
+              preferredKeyHeight,
+              (availableHeight - ((rows - 1) * gap)) / rows,
+            )
+            .clamp(34.0, preferredKeyHeight);
 
         return SizedBox(
-          height: totalHeight,
+          height: availableHeight,
           child: Stack(
             children: specs.map((spec) {
               final left = spec.col * (keyWidth + gap);
@@ -574,8 +612,8 @@ class _TapeKeypad extends StatelessWidget {
   Future<void> _handleAuxCurrency(BuildContext context, String key) async {
     final currency = switch (key) {
       r'$' => 'USD',
-      'E' => 'EUR',
-      '&' => 'GBP',
+      '€' => 'EUR',
+      '£' => 'GBP',
       _ => null,
     };
     if (currency == null) return;
@@ -679,16 +717,17 @@ class _EffectiveFxRates {
   final DecimalValue? eur;
   final DecimalValue? gbp;
 
-  factory _EffectiveFxRates.empty() => _EffectiveFxRates(
-    usd: DecimalValue.parse('38.3400'),
-    eur: DecimalValue.parse('41.2400'),
-    gbp: DecimalValue.parse('48.2700'),
-  );
+  factory _EffectiveFxRates.empty() =>
+      const _EffectiveFxRates(usd: null, eur: null, gbp: null);
 
   factory _EffectiveFxRates.fromSnapshots(List<FxRateSnapshot> snapshots) {
     DecimalValue? pick(String code) {
       for (final s in snapshots) {
         if (s.kind != FxRateKind.effective) continue;
+        if (s.currency.code == code) return s.sell;
+      }
+      for (final s in snapshots) {
+        if (s.kind != FxRateKind.daily) continue;
         if (s.currency.code == code) return s.sell;
       }
       return null;

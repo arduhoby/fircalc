@@ -13,6 +13,7 @@ final displaySettingsProvider =
 class DisplaySettingsController extends Notifier<DisplaySettings> {
   late final DisplaySettingsStorage _storage;
   var _restoreStarted = false;
+  var _mutationVersion = 0;
 
   @override
   DisplaySettings build() {
@@ -24,48 +25,93 @@ class DisplaySettingsController extends Notifier<DisplaySettings> {
   void _restoreIfAny() {
     if (_restoreStarted) return;
     _restoreStarted = true;
+    final restoreVersion = _mutationVersion;
     unawaited(() async {
       final loaded = await _storage.load();
       if (loaded == null || !ref.mounted) return;
-      state = loaded.copyWith(tapeKeyHeight: 50);
+      if (_mutationVersion != restoreVersion) return;
+      state = loaded;
     }());
   }
 
-  void _mutate(DisplaySettings Function(DisplaySettings current) reducer) {
-    state = reducer(state);
-    unawaited(_storage.save(state));
+  Future<void> _mutate(
+    DisplaySettings Function(DisplaySettings current) reducer,
+  ) async {
+    _mutationVersion += 1;
+    final nextState = reducer(state);
+    state = nextState;
+    await _storage.save(nextState);
   }
 
   void setDecimalDigits(int digits) {
     final safe = digits.clamp(0, 8);
-    _mutate((current) => current.copyWith(decimalDigits: safe));
+    unawaited(_mutate((current) => current.copyWith(decimalDigits: safe)));
   }
 
   void toggleGrouping(bool value) {
-    _mutate((current) => current.copyWith(useGrouping: value));
+    unawaited(_mutate((current) => current.copyWith(useGrouping: value)));
   }
 
   void toggleTapeKeySound(bool value) {
-    _mutate((current) => current.copyWith(tapeKeySoundEnabled: value));
+    unawaited(
+      _mutate((current) => current.copyWith(tapeKeySoundEnabled: value)),
+    );
   }
 
   void setVatRatePercent(int value) {
-    _mutate((current) => current.copyWith(vatRatePercent: value.clamp(0, 99)));
+    unawaited(
+      _mutate(
+        (current) => current.copyWith(vatRatePercent: value.clamp(0, 99)),
+      ),
+    );
   }
 
   void toggleTapeSaveMode(bool value) {
-    _mutate((current) => current.copyWith(tapeSaveModeEnabled: value));
+    unawaited(
+      _mutate((current) => current.copyWith(tapeSaveModeEnabled: value)),
+    );
   }
 
   void setTapeKeyHeight(int value) {
-    _mutate((current) => current.copyWith(tapeKeyHeight: value.clamp(44, 58)));
+    unawaited(
+      _mutate(
+        (current) => current.copyWith(tapeKeyHeight: value.clamp(44, 58)),
+      ),
+    );
   }
 
   void setTapeAuxLeft(TapeAuxKeyOption value) {
-    _mutate((current) => current.copyWith(tapeAuxLeft: value));
+    unawaited(_mutate((current) => current.copyWith(tapeAuxLeft: value)));
   }
 
   void setTapeAuxRight(TapeAuxKeyOption value) {
-    _mutate((current) => current.copyWith(tapeAuxRight: value));
+    unawaited(_mutate((current) => current.copyWith(tapeAuxRight: value)));
+  }
+
+  void setMarketPriceDigits(int value) {
+    unawaited(
+      _mutate(
+        (current) => current.copyWith(marketPriceDigits: value.clamp(0, 4)),
+      ),
+    );
+  }
+
+  Future<void> setMarketStockSymbols(List<String> symbols) {
+    final cleaned = symbols
+        .expand((item) => item.split(RegExp(r'[\s,;]+')))
+        .map((item) => item.trim().toUpperCase())
+        .where((item) => item.isNotEmpty)
+        .take(maxMarketStockSymbols)
+        .toList();
+    return _mutate((current) => current.copyWith(marketStockSymbols: cleaned));
+  }
+
+  Future<void> setMarketNewsSources(List<String> sources) {
+    final cleaned = sources
+        .expand((item) => item.split('\n'))
+        .map((item) => item.trim())
+        .where((item) => item.isNotEmpty)
+        .toList();
+    return _mutate((current) => current.copyWith(marketNewsSources: cleaned));
   }
 }
